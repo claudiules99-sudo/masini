@@ -172,7 +172,21 @@ function render(){
   const s = new Date().toLocaleDateString('ro-RO',{weekday:'long',day:'numeric',month:'long'});
   $('#sub').textContent = cars.length ? `${cars.length} vehicule · ${s}` : s;
   const box = $('#cars');
-  if (!cars.length){ box.innerHTML = '<div class="state">Nicio mașină încă.<br>Apasă „Încarcă date” sau „+ Mașină”.</div>'; $('#urg').hidden = true; return; }
+  if (!cars.length){
+    box.innerHTML = `<div class="car" style="padding:16px;display:grid;gap:10px">
+      <strong>Încarcă mașinile</strong>
+      <div class="sub">Copiază linkul lung primit de la Claude, apoi apasă butonul de mai jos.</div>
+      <button class="pri" id="codeBtn">📋 Lipește linkul și încarcă</button>
+      <textarea id="codeIn" placeholder="…sau lipește-l aici manual" style="font:inherit;font-size:13px;min-height:70px;padding:10px;border:1px solid var(--line);border-radius:10px;background:var(--bg);color:var(--ink)"></textarea>
+      <div class="sub" id="codeMsg"></div></div>`;
+    $('#codeBtn').onclick = async () => {
+      let t = $('#codeIn').value.trim();
+      if (!t){ try{ t = (await navigator.clipboard.readText()).trim(); }catch(_){ } }
+      importText(t);
+    };
+    $('#codeIn').oninput = () => { if ($('#codeIn').value.includes('#import=')) importText($('#codeIn').value.trim()); };
+    $('#urg').hidden = true; return;
+  }
   box.innerHTML = cars.map(c => `
     <article class="car" data-id="${esc(c.id)}">
       <div class="car-h"><span class="plate">${esc(c.plate)}</span><span class="nm">${esc(c.name)}</span></div>
@@ -260,6 +274,16 @@ $('#impBtn').onclick = () => {
   };
   $('#ioSheet').classList.add('on');
 };
+
+function importText(t){
+  const msg = $('#codeMsg');
+  try{
+    const i = t.indexOf('#import='); if (i >= 0) t = t.slice(i+8);
+    const data = t.startsWith('[') ? JSON.parse(t) : JSON.parse(b64d(t));
+    if (!Array.isArray(data) || !data.length) throw 0;
+    cars = data; save(); load(); render();
+  }catch(_){ if (msg) msg.textContent = 'Nu am găsit linkul. Copiază-l din nou din Claude.'; }
+}
 
 render();
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(()=>{});
