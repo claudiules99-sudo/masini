@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="ro">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Mașini</title>
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Mașini">
+<meta name="theme-color" content="#17181a">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="icon" href="icon-180.png">
+<link rel="manifest" href="manifest.webmanifest">
+<style>
+  :root{
+    --bg:#f6f5f2; --card:#fff; --ink:#17181a; --mut:#6d6f74; --line:#e4e2dc;
+    --red:#c2321f; --redbg:#fbe9e5; --amb:#a66300; --ambbg:#fdf1dc; --ok:#2d6a3e; --okbg:#e7f2ea; --r:14px;
+  }
+  @media (prefers-color-scheme:dark){
+    :root{--bg:#121314;--card:#1c1d1f;--ink:#ecebe8;--mut:#9a9ca1;--line:#2c2d30;
+      --red:#ff7a66;--redbg:#3a1d18;--amb:#f2b453;--ambbg:#33280f;--ok:#7fcf93;--okbg:#17291c;}
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.4 -apple-system,BlinkMacSystemFont,"SF Pro Text",Inter,system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:760px;margin:0 auto;padding:calc(16px + env(safe-area-inset-top)) 14px calc(40px + env(safe-area-inset-bottom))}
+  header{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;margin-bottom:16px}
+  h1{font-size:28px;letter-spacing:-.02em;margin:0}
+  .sub{color:var(--mut);font-size:13px;margin-top:2px}
+  button{font:inherit;cursor:pointer;border-radius:10px;border:1px solid var(--line);background:var(--card);color:var(--ink);padding:9px 13px}
+  button.pri{background:var(--ink);color:var(--bg);border-color:var(--ink);font-weight:600}
+  .urg{background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:12px 14px;margin-bottom:16px}
+  .urg h2{font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:var(--mut);margin:0 0 6px;font-weight:600}
+  .urg ul{list-style:none;margin:0;padding:0}
+  .urg li{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:7px 0;border-top:1px solid var(--line);font-size:15px}
+  .urg li:first-child{border-top:0}
+  .plate{font-family:ui-monospace,"SF Mono",Menlo,monospace;font-weight:700;letter-spacing:.02em}
+  .grid{display:grid;gap:14px}
+  .car{background:var(--card);border:1px solid var(--line);border-radius:var(--r);overflow:hidden}
+  .car-h{display:flex;align-items:center;padding:14px 14px 8px}
+  .car-h .plate{font-size:17px;border:1.5px solid var(--ink);border-radius:6px;padding:1px 8px}
+  .car-h .nm{color:var(--mut);font-size:15px;margin-left:10px}
+  .vin{font-family:ui-monospace,Menlo,monospace;font-size:11px;color:var(--mut);padding:0 14px 8px}
+  .row{display:grid;grid-template-columns:84px 1fr auto;align-items:center;gap:10px;padding:12px 14px;border-top:1px solid var(--line);cursor:pointer}
+  .row:active{background:color-mix(in srgb,var(--ink) 5%,transparent)}
+  .row .k{font-weight:600;font-size:15px}
+  .row .v{font-size:15px}
+  .row .n{color:var(--mut);font-size:12px}
+  .pill{font-size:12px;font-weight:600;padding:3px 9px;border-radius:999px;white-space:nowrap}
+  .p-red{background:var(--redbg);color:var(--red)} .p-amb{background:var(--ambbg);color:var(--amb)}
+  .p-ok{background:var(--okbg);color:var(--ok)} .p-mut{background:color-mix(in srgb,var(--ink) 7%,transparent);color:var(--mut)}
+  .ed{padding:12px 14px 14px;border-top:1px dashed var(--line);display:grid;gap:10px;background:color-mix(in srgb,var(--ink) 2%,transparent)}
+  .ed label{display:grid;gap:4px;font-size:12px;color:var(--mut)}
+  .ed input{font:inherit;font-size:16px;color:var(--ink);background:var(--card);border:1px solid var(--line);border-radius:9px;padding:9px 10px;width:100%;min-width:0}
+  .two{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .acts{display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap}
+  .chk{display:flex!important;align-items:center;gap:8px!important;color:var(--ink)!important;font-size:14px!important}
+  .chk input{width:auto}
+  .msg{font-size:13px;color:var(--ok)}
+  .state{color:var(--mut);text-align:center;padding:30px 0}
+  .foot{display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin-top:22px}
+  .foot button{font-size:13px;color:var(--mut)}
+  .sheet{position:fixed;inset:0;background:rgba(0,0,0,.4);display:none;align-items:flex-end;justify-content:center;z-index:9}
+  .sheet.on{display:flex}
+  .sheet .box{background:var(--card);border-radius:18px 18px 0 0;padding:18px 16px calc(18px + env(safe-area-inset-bottom));width:100%;max-width:520px;display:grid;gap:10px}
+  .sheet input,.sheet textarea{font:inherit;font-size:16px;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:9px;padding:9px 10px;width:100%}
+  .sheet textarea{min-height:110px;font-family:ui-monospace,Menlo,monospace;font-size:12px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div><h1>Mașini</h1><div class="sub" id="sub">RCA · ITP · Rovinietă · Ulei</div></div>
+    <button id="addBtn">+ Mașină</button>
+  </header>
+  <section class="urg" id="urg" hidden><h2>Urmează</h2><ul id="urgList"></ul></section>
+  <div class="grid" id="cars"></div>
+  <div class="foot">
+    <button id="expBtn">Backup date</button>
+    <button id="impBtn">Încarcă date</button>
+  </div>
+</div>
+
+<div class="sheet" id="addSheet"><form class="box" id="addForm">
+  <strong>Adaugă mașină</strong>
+  <input name="plate" placeholder="Nr. înmatriculare" required autocapitalize="characters">
+  <input name="name" placeholder="Denumire (ex. VW Golf)" required>
+  <input name="vin" placeholder="Serie șasiu (opțional)" autocapitalize="characters">
+  <div class="acts"><button type="button" data-close>Renunță</button><button class="pri">Adaugă</button></div>
+</form></div>
+
+<div class="sheet" id="ioSheet"><div class="box">
+  <strong id="ioTitle">Date</strong>
+  <div class="sub" id="ioHint"></div>
+  <textarea id="ioText"></textarea>
+  <div class="acts"><button data-close>Închide</button><button class="pri" id="ioAct">OK</button></div>
+</div></div>
+
+<script>
+const KEY = 'masini.v1';
+const ITEMS = [{key:'rca',label:'RCA'},{key:'itp',label:'ITP'},{key:'rov',label:'Rovinietă'},{key:'ulei',label:'Ulei'}];
+let cars = [], openEd = null;
+
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const today = () => { const d = new Date(); d.setHours(0,0,0,0); return d; };
+const parse = s => s ? new Date(s + 'T00:00:00') : null;
+const fmt = s => { const d = parse(s); return d ? d.toLocaleDateString('ro-RO',{day:'2-digit',month:'2-digit',year:'numeric'}) : '—'; };
+const daysLeft = s => { const d = parse(s); return d ? Math.round((d - today())/86400000) : null; };
+const ymd = d => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+const addMonths = (s, m) => { const d = parse(s); if(!d) return ''; d.setMonth(d.getMonth() + Number(m||12)); return ymd(d); };
+
+function load(){ try{ cars = JSON.parse(localStorage.getItem(KEY) || '[]'); }catch(_){ cars = []; } cars.sort((a,b)=>(a.order||0)-(b.order||0)); }
+function save(){ try{ localStorage.setItem(KEY, JSON.stringify(cars)); }catch(_){ } }
+function b64d(s){ s = s.replace(/-/g,'+').replace(/_/g,'/'); while(s.length%4) s+='='; return decodeURIComponent(escape(atob(s))); }
+function b64e(s){ return btoa(unescape(encodeURIComponent(s))).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,''); }
+
+// one-time import from link: #import=<base64>
+if (location.hash.startsWith('#import=')){
+  try{ const data = JSON.parse(b64d(location.hash.slice(8))); if (Array.isArray(data)) { localStorage.setItem(KEY, JSON.stringify(data)); } }catch(_){}
+  history.replaceState(null, '', location.pathname);
+}
+load();
+
+const dueOf = (c,k) => { const it = c[k]||{}; return k==='ulei' ? (it.last ? addMonths(it.last, it.months||12) : '') : (it.until||''); };
+function pill(c,k){
+  const it = c[k]||{};
+  if (it.na) return '<span class="pill p-mut">nu e cazul</span>';
+  const d = dueOf(c,k); if (!d) return '<span class="pill p-mut">lipsă</span>';
+  const n = daysLeft(d);
+  if (n < 0) return `<span class="pill p-red">expirat ${-n} z</span>`;
+  if (n === 0) return '<span class="pill p-red">azi</span>';
+  if (n <= 7) return `<span class="pill p-red">${n} zile</span>`;
+  if (n <= 30) return `<span class="pill p-amb">${n} zile</span>`;
+  return `<span class="pill p-ok">${n} zile</span>`;
+}
+function detail(c,k){
+  const it = c[k]||{};
+  if (k==='ulei'){
+    if (it.na) return `<div><div class="v">—</div>${it.note?`<div class="n">${esc(it.note)}</div>`:''}</div>`;
+    if (!it.last) return '<div class="v">—</div>';
+    const nextKm = it.km && it.kmInterval ? ` sau ${(+it.km + +it.kmInterval).toLocaleString('ro-RO')} km` : '';
+    return `<div><div class="v">următorul ${fmt(dueOf(c,k))}${nextKm}</div><div class="n">schimbat ${fmt(it.last)}${it.km?' · '+(+it.km).toLocaleString('ro-RO')+' km':''}</div></div>`;
+  }
+  return `<div><div class="v">${(it.na||!it.until)?'—':'până la '+fmt(it.until)}</div>${it.note?`<div class="n">${esc(it.note)}</div>`:''}</div>`;
+}
+function editor(c,k){
+  const it = c[k]||{};
+  const cal = `<button data-cal>📅 Pune în calendar</button>`;
+  if (k==='ulei') return `<div class="ed" data-ed>
+    <div class="two">
+      <label>Ultimul schimb<input type="date" name="last" value="${esc(it.last||'')}"></label>
+      <label>Km atunci<input type="number" inputmode="numeric" name="km" value="${esc(it.km||'')}"></label>
+      <label>Interval (luni)<input type="number" inputmode="numeric" name="months" value="${esc(it.months||12)}"></label>
+      <label>Interval (km)<input type="number" inputmode="numeric" name="kmInterval" value="${esc(it.kmInterval||'')}" placeholder="10000"></label>
+    </div>
+    <label class="chk"><input type="checkbox" name="na" ${it.na?'checked':''}> Nu e cazul</label>
+    <div class="msg"></div>
+    <div class="acts"><button data-x>Închide</button>${cal}<button class="pri" data-save>Salvează</button></div></div>`;
+  return `<div class="ed" data-ed>
+    <div class="two">
+      <label>Valabil până la<input type="date" name="until" value="${esc(it.until||'')}"></label>
+      <label>Notă<input name="note" value="${esc(it.note||'')}"></label>
+    </div>
+    <label class="chk"><input type="checkbox" name="na" ${it.na?'checked':''}> Nu e cazul</label>
+    <div class="msg"></div>
+    <div class="acts"><button data-x>Închide</button>${cal}<button class="pri" data-save>Salvează</button></div></div>`;
+}
+
+function render(){
+  const s = new Date().toLocaleDateString('ro-RO',{weekday:'long',day:'numeric',month:'long'});
+  $('#sub').textContent = cars.length ? `${cars.length} vehicule · ${s}` : s;
+  const box = $('#cars');
+  if (!cars.length){ box.innerHTML = '<div class="state">Nicio mașină încă.<br>Apasă „Încarcă date” sau „+ Mașină”.</div>'; $('#urg').hidden = true; return; }
+  box.innerHTML = cars.map(c => `
+    <article class="car" data-id="${esc(c.id)}">
+      <div class="car-h"><span class="plate">${esc(c.plate)}</span><span class="nm">${esc(c.name)}</span></div>
+      ${c.vin?`<div class="vin">VIN ${esc(c.vin)}</div>`:''}
+      ${ITEMS.map(({key,label}) => `<div class="row" data-k="${key}"><div class="k">${label}</div>${detail(c,key)}${pill(c,key)}</div>
+        ${openEd && openEd.id===c.id && openEd.key===key ? editor(c,key) : ''}`).join('')}
+    </article>`).join('');
+  const u = [];
+  for (const c of cars) for (const {key,label} of ITEMS){
+    const it = c[key]||{}; if (it.na) continue;
+    const d = dueOf(c,key), n = d ? daysLeft(d) : null;
+    if (n === null) u.push({c,label,n:9999,txt:'lipsă dată'});
+    else if (n <= 30) u.push({c,label,n,txt: n<0?`expirat de ${-n} zile`: n===0?'azi':`în ${n} zile`});
+  }
+  u.sort((a,b)=>a.n-b.n);
+  $('#urg').hidden = !u.length;
+  $('#urgList').innerHTML = u.map(x => `<li><span><span class="plate">${esc(x.c.plate)}</span> · ${x.label}</span><span class="pill ${x.n<=7?'p-red':x.n<=30?'p-amb':'p-mut'}">${x.txt}</span></li>`).join('');
+}
+
+function readEd(ed){ return Object.fromEntries([...ed.querySelectorAll('input')].map(i => [i.name, i.type==='checkbox' ? i.checked : i.value.trim()])); }
+
+function icsFor(c, k, due){
+  const label = ITEMS.find(x=>x.key===k).label;
+  const d = parse(due), e = new Date(d); e.setDate(e.getDate()+1);
+  const D = x => ymd(x).replace(/-/g,'');
+  const title = `🚗 ${k==='ulei'?'Schimb ulei':'Expiră '+label} – ${c.plate} (${c.name})`;
+  const stamp = new Date().toISOString().replace(/[-:]/g,'').replace(/\.\d+Z$/,'Z');
+  const alarm = t => `BEGIN:VALARM\r\nACTION:DISPLAY\r\nDESCRIPTION:${title}\r\nTRIGGER:${t}\r\nEND:VALARM\r\n`;
+  return `BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//Masini//RO\r\nBEGIN:VEVENT\r\nUID:${c.id}-${k}-${D(d)}@masini\r\nDTSTAMP:${stamp}\r\nDTSTART;VALUE=DATE:${D(d)}\r\nDTEND;VALUE=DATE:${D(e)}\r\nSUMMARY:${title}\r\nDESCRIPTION:${label} – ${fmt(due)}\r\nTRANSP:TRANSPARENT\r\n${alarm('-P28D')}${alarm('-P7D')}${alarm('-P1D')}END:VEVENT\r\nEND:VCALENDAR\r\n`;
+}
+
+document.addEventListener('click', e => {
+  if (e.target.matches('[data-close]')){ e.target.closest('.sheet').classList.remove('on'); return; }
+  const row = e.target.closest('.row'), car = e.target.closest('.car');
+  if (row && car){ const id = car.dataset.id, key = row.dataset.k; openEd = (openEd && openEd.id===id && openEd.key===key) ? null : {id,key}; render(); return; }
+  if (e.target.matches('[data-x]')){ openEd = null; render(); return; }
+  if (e.target.matches('[data-save]') || e.target.matches('[data-cal]')){
+    const ed = e.target.closest('[data-ed]'), c = cars.find(x=>x.id===car.dataset.id), k = openEd.key;
+    c[k] = {...(c[k]||{}), ...readEd(ed)};
+    save();
+    const due = c[k].na ? '' : dueOf(c,k);
+    if (e.target.matches('[data-cal]')){
+      if (!due){ ed.querySelector('.msg').textContent = 'Pune întâi o dată.'; return; }
+      const blob = new Blob([icsFor(c,k,due)], {type:'text/calendar'});
+      const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `${c.plate}-${k}.ics`;
+      document.body.appendChild(a); a.click(); setTimeout(()=>{ URL.revokeObjectURL(a.href); a.remove(); }, 4000);
+      ed.querySelector('.msg').textContent = 'Salvat. Apasă „Adaugă” în calendar.';
+      return;
+    }
+    ed.querySelector('.msg').textContent = 'Salvat ✓';
+    setTimeout(()=>{ openEd = null; render(); }, 600);
+  }
+});
+
+$('#addBtn').onclick = () => $('#addSheet').classList.add('on');
+$('#addForm').onsubmit = ev => {
+  ev.preventDefault();
+  const f = new FormData(ev.target);
+  const plate = String(f.get('plate')).toUpperCase().replace(/\s+/g,'');
+  const id = plate.replace(/[^A-Z0-9]/g,'') || ('car'+Date.now());
+  if (cars.some(c=>c.id===id)) return;
+  cars.push({id, plate, name:String(f.get('name')), vin:String(f.get('vin')||'').toUpperCase(), order:cars.length+1, rca:{}, itp:{}, rov:{}, ulei:{months:12}});
+  save(); ev.target.reset(); $('#addSheet').classList.remove('on'); render();
+};
+
+$('#expBtn').onclick = () => {
+  const link = location.origin + location.pathname + '#import=' + b64e(JSON.stringify(cars));
+  $('#ioTitle').textContent = 'Backup date';
+  $('#ioHint').textContent = 'Copiază linkul și păstrează-l (Notes). Deschis în Safari, refacе toate datele.';
+  $('#ioText').value = link; $('#ioAct').textContent = 'Copiază';
+  $('#ioAct').onclick = async () => { try{ await navigator.clipboard.writeText(link); $('#ioAct').textContent = 'Copiat ✓'; }catch(_){ $('#ioText').select(); } };
+  $('#ioSheet').classList.add('on');
+};
+$('#impBtn').onclick = () => {
+  $('#ioTitle').textContent = 'Încarcă date';
+  $('#ioHint').textContent = 'Lipește linkul de backup (sau codul). Înlocuiește datele de acum.';
+  $('#ioText').value = ''; $('#ioAct').textContent = 'Încarcă';
+  $('#ioAct').onclick = () => {
+    try{
+      let t = $('#ioText').value.trim(); const i = t.indexOf('#import='); if (i >= 0) t = t.slice(i+8);
+      const data = t.startsWith('[') ? JSON.parse(t) : JSON.parse(b64d(t));
+      if (!Array.isArray(data)) throw 0;
+      cars = data; save(); load(); render(); $('#ioSheet').classList.remove('on');
+    }catch(_){ $('#ioHint').textContent = 'Cod invalid.'; }
+  };
+  $('#ioSheet').classList.add('on');
+};
+
+render();
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(()=>{});
+</script>
+</body>
+</html>
