@@ -115,10 +115,11 @@ function save(){ try{ localStorage.setItem(KEY, JSON.stringify(cars)); }catch(_)
 function b64d(s){ s = s.replace(/-/g,'+').replace(/_/g,'/'); while(s.length%4) s+='='; return decodeURIComponent(escape(atob(s))); }
 function b64e(s){ return btoa(unescape(encodeURIComponent(s))).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,''); }
 
-// one-time import from link: #import=<base64>
+// import from link #import=<base64> — only when this app has no data yet.
+// The hash is kept so "Add to Home Screen" carries it (iOS home-screen apps have separate storage from Safari).
 if (location.hash.startsWith('#import=')){
-  try{ const data = JSON.parse(b64d(location.hash.slice(8))); if (Array.isArray(data)) { localStorage.setItem(KEY, JSON.stringify(data)); } }catch(_){}
-  history.replaceState(null, '', location.pathname);
+  let has = false; try{ has = JSON.parse(localStorage.getItem(KEY) || '[]').length > 0; }catch(_){}
+  if (!has){ try{ const data = JSON.parse(b64d(location.hash.slice(8))); if (Array.isArray(data)) localStorage.setItem(KEY, JSON.stringify(data)); }catch(_){} }
 }
 load();
 
