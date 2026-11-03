@@ -65,6 +65,33 @@
   .sheet .box{background:var(--card);border-radius:18px 18px 0 0;padding:18px 16px calc(18px + env(safe-area-inset-bottom));width:100%;max-width:520px;display:grid;gap:10px}
   .sheet input,.sheet textarea{font:inherit;font-size:16px;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:9px;padding:9px 10px;width:100%}
   .sheet textarea{min-height:110px;font-family:ui-monospace,Menlo,monospace;font-size:12px}
+
+  /* ---- v2 look ---- */
+  body{background:radial-gradient(1200px 500px at 50% -200px, color-mix(in srgb,#3b6cf6 14%,var(--bg)), var(--bg))}
+  .tiles{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:16px}
+  .tile{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:12px;display:grid;gap:2px}
+  .tile b{font-size:26px;line-height:1;letter-spacing:-.02em}
+  .tile span{font-size:12px;color:var(--mut)}
+  .tile.t-red b{color:var(--red)} .tile.t-amb b{color:var(--amb)} .tile.t-ok b{color:var(--ok)}
+  .car{border-radius:18px;box-shadow:0 1px 0 rgba(0,0,0,.02),0 8px 24px -12px rgba(0,0,0,.18)}
+  .hero{position:relative;height:160px;overflow:hidden;display:flex;align-items:flex-end;background:var(--g)}
+  .hero img.ph{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+  .hero svg.sil{position:absolute;right:-10px;bottom:4px;width:62%;height:auto;opacity:.95}
+  .hero::after{content:"";position:absolute;inset:0;background:linear-gradient(90deg,rgba(0,0,0,.45),rgba(0,0,0,0) 55%)}
+  .hero .hc{position:relative;z-index:1;padding:12px 14px;display:flex;align-items:flex-end;justify-content:space-between;width:100%;gap:10px}
+  .hero .nm2{color:#fff;font-weight:700;font-size:19px;letter-spacing:-.01em;text-shadow:0 1px 8px rgba(0,0,0,.35)}
+  .hero .nx{color:rgba(255,255,255,.88);font-size:12.5px;margin-top:2px}
+  .rplate{display:inline-flex;align-items:stretch;background:#fff;border:1.5px solid #111;border-radius:5px;overflow:hidden;font-family:ui-monospace,"SF Mono",Menlo,monospace;font-weight:800;color:#111;font-size:15px;box-shadow:0 2px 8px rgba(0,0,0,.25)}
+  .rplate i{background:#0b3fa8;color:#fff;font-style:normal;font-size:8px;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;padding:2px 3px 2px;font-weight:700;gap:1px}
+  .rplate i::before{content:"★";color:#ffd400;font-size:8px;line-height:1}
+  .rplate em{font-style:normal;padding:3px 7px;letter-spacing:.04em}
+  .cam{position:absolute;top:10px;right:10px;z-index:2;background:rgba(0,0,0,.35);color:#fff;border:0;border-radius:999px;width:34px;height:34px;padding:0;font-size:16px;backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px)}
+  .vin{padding:10px 14px 4px}
+  .row .k{display:flex;align-items:center;gap:8px}
+  .row .k .ic{width:28px;height:28px;border-radius:8px;display:grid;place-items:center;font-size:15px;background:color-mix(in srgb,var(--ink) 6%,transparent)}
+  .row{grid-template-columns:112px 1fr auto}
+  .bar{height:4px;border-radius:4px;background:color-mix(in srgb,var(--ink) 8%,transparent);margin-top:6px;overflow:hidden}
+  .bar>b{display:block;height:100%;border-radius:4px}
 </style>
 </head>
 <body>
@@ -73,6 +100,7 @@
     <div><h1>Mașini</h1><div class="sub" id="sub">RCA · ITP · Rovinietă · Ulei</div></div>
     <button id="addBtn">+ Mașină</button>
   </header>
+  <div class="tiles" id="tiles"></div>
   <section class="urg" id="urg" hidden><h2>Urmează</h2><ul id="urgList"></ul></section>
   <div class="grid" id="cars"></div>
   <div class="foot">
@@ -81,6 +109,7 @@
   </div>
 </div>
 
+<input type="file" id="photoIn" accept="image/*" hidden>
 <div class="sheet" id="addSheet"><form class="box" id="addForm">
   <strong>Adaugă mașină</strong>
   <input name="plate" placeholder="Nr. înmatriculare" required autocapitalize="characters">
@@ -109,6 +138,52 @@ const fmt = s => { const d = parse(s); return d ? d.toLocaleDateString('ro-RO',{
 const daysLeft = s => { const d = parse(s); return d ? Math.round((d - today())/86400000) : null; };
 const ymd = d => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
 const addMonths = (s, m) => { const d = parse(s); if(!d) return ''; d.setMonth(d.getMonth() + Number(m||12)); return ymd(d); };
+
+
+const ICON = {rca:'🛡️', itp:'🔧', rov:'🛣️', ulei:'🛢️'};
+const GRAD = {
+  sedan:'linear-gradient(135deg,#1f2a44,#3d5a96)',
+  suv:'linear-gradient(135deg,#2f3b22,#6b7a3a)',
+  hatch:'linear-gradient(135deg,#0f4c4c,#2a9d8f)',
+  city:'linear-gradient(135deg,#5a1f3d,#c0506d)',
+  trailer:'linear-gradient(135deg,#3a3a3a,#7a7a7a)'
+};
+const W = '#f5f5f2', D = 'rgba(0,0,0,.55)';
+const wheel = (x,y,r) => `<circle cx="${x}" cy="${y}" r="${r}" fill="#1a1a1a"/><circle cx="${x}" cy="${y}" r="${r*.55}" fill="#bfc3c9"/><circle cx="${x}" cy="${y}" r="${r*.18}" fill="#555"/>`;
+const SIL = {
+  sedan:`<svg class="sil" viewBox="0 0 300 110"><ellipse cx="150" cy="100" rx="135" ry="6" fill="${D}" opacity=".4"/><path d="M18 78 Q20 60 45 56 L92 50 Q115 28 150 26 L190 26 Q215 28 238 50 L270 56 Q288 60 288 78 L288 86 L18 86 Z" fill="${W}"/><path d="M104 50 Q122 33 150 32 L170 32 L170 50 Z M178 32 L190 32 Q210 34 226 50 L178 50 Z" fill="#9fb3d1"/>${wheel(70,86,17)}${wheel(232,86,17)}</svg>`,
+  suv:`<svg class="sil" viewBox="0 0 300 120"><ellipse cx="150" cy="110" rx="130" ry="6" fill="${D}" opacity=".4"/><path d="M30 88 L30 50 Q30 40 40 38 L70 36 L88 16 L200 16 Q212 16 216 26 L224 40 L262 44 Q276 46 276 60 L276 88 Z" fill="${W}"/><path d="M96 22 L140 22 L140 40 L84 40 Z M148 22 L196 22 Q204 22 207 30 L212 40 L148 40 Z" fill="#b9c79a"/><rect x="18" y="56" width="14" height="22" rx="3" fill="#d9d9d4"/><rect x="40" y="10" width="140" height="5" rx="2" fill="#2a2a2a"/>${wheel(78,92,21)}${wheel(228,92,21)}</svg>`,
+  hatch:`<svg class="sil" viewBox="0 0 300 110"><ellipse cx="150" cy="100" rx="125" ry="6" fill="${D}" opacity=".4"/><path d="M30 80 Q30 62 52 58 L90 52 Q112 28 150 26 L210 28 Q236 30 250 56 L268 62 Q276 66 276 80 L276 86 L30 86 Z" fill="${W}"/><path d="M102 50 Q120 34 150 33 L172 33 L172 50 Z M180 33 L208 34 Q226 36 236 50 L180 50 Z" fill="#9fd6cf"/>${wheel(78,86,17)}${wheel(232,86,17)}</svg>`,
+  city:`<svg class="sil" viewBox="0 0 300 120"><ellipse cx="160" cy="110" rx="95" ry="6" fill="${D}" opacity=".4"/><path d="M80 92 Q76 70 92 62 L110 30 Q118 18 140 18 L190 18 Q214 20 226 44 L238 64 Q246 72 244 92 Z" fill="${W}"/><path d="M118 30 Q124 24 140 24 L160 24 L160 52 L106 52 Z M168 24 L188 24 Q204 26 214 44 L218 52 L168 52 Z" fill="#e2a8b8"/><rect x="160" y="18" width="8" height="74" fill="#2a2a2a" opacity=".8"/>${wheel(110,94,16)}${wheel(212,94,16)}</svg>`,
+  trailer:`<svg class="sil" viewBox="0 0 300 110"><ellipse cx="160" cy="100" rx="110" ry="6" fill="${D}" opacity=".4"/><rect x="70" y="40" width="180" height="40" rx="4" fill="${W}"/><rect x="70" y="40" width="180" height="8" fill="#cfcfcb"/><path d="M70 70 L20 74 L20 78 L70 78 Z" fill="#2a2a2a"/><circle cx="18" cy="76" r="5" fill="#2a2a2a"/>${wheel(160,86,16)}</svg>`
+};
+function typeOf(c){
+  if (c.type) return c.type;
+  const n = (c.name||'').toLowerCase();
+  if (/remorc|trailer/.test(n)) return 'trailer';
+  if (/samurai|jimny|4x4|suv|duster|jeep/.test(n)) return 'suv';
+  if (/smart|up!|twingo|panda/.test(n)) return 'city';
+  if (/spring|golf|polo|clio|sandero|hatch/.test(n)) return 'hatch';
+  return 'sedan';
+}
+const fmtPlate = p => String(p||'').replace(/^([A-Z]{1,2})(\d{2,3})([A-Z]{3})$/, '$1 $2 $3');
+function nextOf(c){
+  let best = null;
+  for (const {key,label} of ITEMS){ const it=c[key]||{}; if (it.na) continue; const d=dueOf(c,key); if(!d) continue; const n=daysLeft(d); if(!best||n<best.n) best={n,label}; }
+  if (!best) return '';
+  return best.n < 0 ? `${best.label} expirat de ${-best.n} zile` : best.n === 0 ? `${best.label} expiră azi` : `Următorul: ${best.label} în ${best.n} zile`;
+}
+async function setPhoto(id, file){
+  const img = new Image(); const url = URL.createObjectURL(file);
+  await new Promise((r,j)=>{ img.onload=r; img.onerror=j; img.src=url; });
+  const W = 900, sc = Math.min(1, W/img.width), cv = document.createElement('canvas');
+  cv.width = Math.round(img.width*sc); cv.height = Math.round(img.height*sc);
+  cv.getContext('2d').drawImage(img,0,0,cv.width,cv.height); URL.revokeObjectURL(url);
+  const c = cars.find(x=>x.id===id); c.photo = cv.toDataURL('image/jpeg', .72);
+  try{ save(); }catch(_){}
+  render();
+}
+let photoFor = null;
 
 function load(){ try{ cars = JSON.parse(localStorage.getItem(KEY) || '[]'); }catch(_){ cars = []; } cars.sort((a,b)=>(a.order||0)-(b.order||0)); }
 function save(){ try{ localStorage.setItem(KEY, JSON.stringify(cars)); }catch(_){ } }
@@ -187,13 +262,26 @@ function render(){
     $('#codeIn').oninput = () => { if ($('#codeIn').value.includes('#import=')) importText($('#codeIn').value.trim()); };
     $('#urg').hidden = true; return;
   }
-  box.innerHTML = cars.map(c => `
+  box.innerHTML = cars.map(c => {
+    const nx = nextOf(c);
+    const t = typeOf(c);
+    return `
     <article class="car" data-id="${esc(c.id)}">
-      <div class="car-h"><span class="plate">${esc(c.plate)}</span><span class="nm">${esc(c.name)}</span></div>
+      <div class="hero" style="--g:${GRAD[t]}">
+        ${c.photo ? `<img class="ph" src="${c.photo}" alt="">` : SIL[t]}
+        <button class="cam" data-photo title="Poză">📷</button>
+        <div class="hc">
+          <div><span class="rplate"><i>RO</i><em>${esc(fmtPlate(c.plate))}</em></span><div class="nm2" style="margin-top:8px">${esc(c.name)}</div><div class="nx">${nx ? esc(nx) : 'totul în regulă'}</div></div>
+        </div>
+      </div>
       ${c.vin?`<div class="vin">VIN ${esc(c.vin)}</div>`:''}
-      ${ITEMS.map(({key,label}) => `<div class="row" data-k="${key}"><div class="k">${label}</div>${detail(c,key)}${pill(c,key)}</div>
+      ${ITEMS.map(({key,label}) => `<div class="row" data-k="${key}"><div class="k"><span class="ic">${ICON[key]}</span>${label}</div>${detail(c,key)}${pill(c,key)}</div>
         ${openEd && openEd.id===c.id && openEd.key===key ? editor(c,key) : ''}`).join('')}
-    </article>`).join('');
+    </article>`;}).join('');
+  // tiles
+  let nr=0, na=0, nok=0;
+  for (const c of cars) for (const {key} of ITEMS){ const it=c[key]||{}; if(it.na) continue; const d=dueOf(c,key); if(!d) continue; const n=daysLeft(d); if(n<=7) nr++; else if(n<=30) na++; else nok++; }
+  $('#tiles').innerHTML = `<div class="tile t-red"><b>${nr}</b><span>urgente (≤7 zile)</span></div><div class="tile t-amb"><b>${na}</b><span>luna asta</span></div><div class="tile t-ok"><b>${nok}</b><span>în regulă</span></div>`;
   const u = [];
   for (const c of cars) for (const {key,label} of ITEMS){
     const it = c[key]||{}; if (it.na) continue;
@@ -220,6 +308,7 @@ function icsFor(c, k, due){
 
 document.addEventListener('click', e => {
   if (e.target.matches('[data-close]')){ e.target.closest('.sheet').classList.remove('on'); return; }
+  if (e.target.matches('[data-photo]')){ photoFor = e.target.closest('.car').dataset.id; $('#photoIn').value=''; $('#photoIn').click(); return; }
   const row = e.target.closest('.row'), car = e.target.closest('.car');
   if (row && car){ const id = car.dataset.id, key = row.dataset.k; openEd = (openEd && openEd.id===id && openEd.key===key) ? null : {id,key}; render(); return; }
   if (e.target.matches('[data-x]')){ openEd = null; render(); return; }
@@ -253,7 +342,7 @@ $('#addForm').onsubmit = ev => {
 };
 
 $('#expBtn').onclick = () => {
-  const link = location.origin + location.pathname + '#import=' + b64e(JSON.stringify(cars));
+  const link = location.origin + location.pathname + '#import=' + b64e(JSON.stringify(cars.map(({photo,...r})=>r)));
   $('#ioTitle').textContent = 'Backup date';
   $('#ioHint').textContent = 'Copiază linkul și păstrează-l (Notes). Deschis în Safari, refacе toate datele.';
   $('#ioText').value = link; $('#ioAct').textContent = 'Copiază';
@@ -281,9 +370,12 @@ function importText(t){
     const i = t.indexOf('#import='); if (i >= 0) t = t.slice(i+8);
     const data = t.startsWith('[') ? JSON.parse(t) : JSON.parse(b64d(t));
     if (!Array.isArray(data) || !data.length) throw 0;
+    const old = Object.fromEntries(cars.map(c=>[c.id,c.photo])); data.forEach(d=>{ if(!d.photo && old[d.id]) d.photo = old[d.id]; });
     cars = data; save(); load(); render();
   }catch(_){ if (msg) msg.textContent = 'Nu am găsit linkul. Copiază-l din nou din Claude.'; }
 }
+
+$('#photoIn').onchange = e => { const f = e.target.files[0]; if (f && photoFor) setPhoto(photoFor, f); };
 
 render();
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(()=>{});
