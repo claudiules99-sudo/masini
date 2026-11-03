@@ -92,6 +92,16 @@
   .row{grid-template-columns:112px 1fr auto}
   .bar{height:4px;border-radius:4px;background:color-mix(in srgb,var(--ink) 8%,transparent);margin-top:6px;overflow:hidden}
   .bar>b{display:block;height:100%;border-radius:4px}
+
+  .hero.toonbg{background:linear-gradient(180deg,#bfe0ff,#e9f4ff 70%)}
+  .hero.toonbg::after{background:linear-gradient(90deg,rgba(255,255,255,.75),rgba(255,255,255,0) 50%)}
+  .hero.toonbg .nm2{color:#14161a;text-shadow:none}
+  .hero.toonbg .nx{color:#3d4249}
+  .hero svg.scene{position:absolute;inset:0;width:100%;height:100%}
+  .hero svg.toon{position:absolute;right:-4px;bottom:-2px;width:66%;max-width:330px;height:auto;filter:drop-shadow(0 4px 6px rgba(0,0,0,.12))}
+  .hbtns{position:absolute;top:10px;right:10px;z-index:2;display:flex;gap:6px}
+  .hbtns .cam{position:static}
+  .hero.toonbg .cam{background:rgba(255,255,255,.7);color:#111}
 </style>
 </head>
 <body>
@@ -110,6 +120,7 @@
 </div>
 
 <input type="file" id="photoIn" accept="image/*" hidden>
+<input type="color" id="colorIn" style="position:fixed;left:-100px;top:0;opacity:0">
 <div class="sheet" id="addSheet"><form class="box" id="addForm">
   <strong>Adaugă mașină</strong>
   <input name="plate" placeholder="Nr. înmatriculare" required autocapitalize="characters">
@@ -157,6 +168,96 @@ const SIL = {
   city:`<svg class="sil" viewBox="0 0 300 120"><ellipse cx="160" cy="110" rx="95" ry="6" fill="${D}" opacity=".4"/><path d="M80 92 Q76 70 92 62 L110 30 Q118 18 140 18 L190 18 Q214 20 226 44 L238 64 Q246 72 244 92 Z" fill="${W}"/><path d="M118 30 Q124 24 140 24 L160 24 L160 52 L106 52 Z M168 24 L188 24 Q204 26 214 44 L218 52 L168 52 Z" fill="#e2a8b8"/><rect x="160" y="18" width="8" height="74" fill="#2a2a2a" opacity=".8"/>${wheel(110,94,16)}${wheel(212,94,16)}</svg>`,
   trailer:`<svg class="sil" viewBox="0 0 300 110"><ellipse cx="160" cy="100" rx="110" ry="6" fill="${D}" opacity=".4"/><rect x="70" y="40" width="180" height="40" rx="4" fill="${W}"/><rect x="70" y="40" width="180" height="8" fill="#cfcfcb"/><path d="M70 70 L20 74 L20 78 L70 78 Z" fill="#2a2a2a"/><circle cx="18" cy="76" r="5" fill="#2a2a2a"/>${wheel(160,86,16)}</svg>`
 };
+
+const OUT = '#1b1b1b';
+const tire = (x,y,r) => `<g><circle cx="${x}" cy="${y}" r="${r}" fill="#262626" stroke="${OUT}" stroke-width="4"/><circle cx="${x}" cy="${y}" r="${r*.52}" fill="#d9dce1" stroke="${OUT}" stroke-width="3"/><circle cx="${x}" cy="${y}" r="${r*.16}" fill="#6b6f76"/></g>`;
+const shade = (hex, f) => { const n = parseInt(hex.slice(1),16); let r=n>>16, g=n>>8&255, b=n&255; const m = v => Math.max(0,Math.min(255,Math.round(f<0? v*(1+f) : v+(255-v)*f))); return '#' + [m(r),m(g),m(b)].map(v=>v.toString(16).padStart(2,'0')).join(''); };
+const GLASS = '#bfe0ff';
+function modelOf(c){
+  const n = (c.name||'').toLowerCase();
+  if (/audi/.test(n)) return 'a4';
+  if (/samurai/.test(n)) return 'samurai';
+  if (/spring/.test(n)) return 'spring';
+  if (/smart/.test(n)) return 'smart';
+  if (/remorc|trailer/.test(n)) return 'trailer';
+  return 'a4';
+}
+function toon(c){
+  const C = c.color || '#c9ccd1', L = shade(C,.35), Dk = shade(C,-.35);
+  const sw = `stroke="${OUT}" stroke-width="4" stroke-linejoin="round"`;
+  const shine = d => `<path d="${d}" fill="#fff" opacity=".35"/>`;
+  const m = modelOf(c);
+  let g = '';
+  if (m === 'a4') g = `
+    <ellipse cx="155" cy="146" rx="138" ry="7" fill="#000" opacity=".15"/>
+    <path d="M18 122 L18 100 Q20 91 32 90 L82 86 Q104 60 142 56 L182 56 Q207 58 224 84 L272 90 Q289 94 290 110 L290 122 Q290 128 282 128 L26 128 Q18 128 18 122 Z" fill="${C}" ${sw}/>
+    ${shine('M30 96 L82 92 L80 98 L30 101 Z')}
+    <path d="M94 84 Q110 64 142 62 L150 62 L150 84 Z" fill="${GLASS}" ${sw}/>
+    <path d="M158 62 L180 62 Q200 64 214 84 L158 84 Z" fill="${GLASS}" ${sw}/>
+    <path d="M154 86 L154 124" stroke="${Dk}" stroke-width="3"/>
+    <path d="M276 100 L290 98 L290 120 L278 118 Z" fill="#2a2a2a" ${sw}/>
+    <path d="M262 92 L284 95 L280 101 L262 99 Z" fill="#fff6c8" ${sw}/>
+    <rect x="18" y="96" width="9" height="8" rx="2" fill="#e33b2e" stroke="${OUT}" stroke-width="3"/>
+    <rect x="128" y="96" width="14" height="4" rx="2" fill="${Dk}"/><rect x="186" y="96" width="14" height="4" rx="2" fill="${Dk}"/>
+    ${tire(70,128,22)}${tire(238,128,22)}`;
+  if (m === 'samurai') g = `
+    <ellipse cx="160" cy="150" rx="130" ry="7" fill="#000" opacity=".15"/>
+    <rect x="96" y="20" width="98" height="8" rx="3" fill="#2a2a2a" ${sw}/>
+    ${[108,124,140,156,172].map(x=>`<circle cx="${x}" cy="24" r="2.6" fill="#fff8b0"/>`).join('')}
+    <path d="M44 114 L44 76 Q44 68 52 68 L78 68 L84 40 Q86 34 94 34 L196 34 Q204 34 206 42 L212 68 L262 72 Q274 73 274 86 L274 114 Q274 120 266 120 L52 120 Q44 120 44 114 Z" fill="${C}" ${sw}/>
+    ${shine('M56 76 L78 74 L77 80 L56 82 Z')}
+    <path d="M92 42 L140 42 L140 68 L86 68 Z" fill="${GLASS}" ${sw}/>
+    <path d="M148 42 L196 42 L202 68 L148 68 Z" fill="${GLASS}" ${sw}/>
+    <path d="M100 76 L196 76 M100 76 L100 112 M196 76 L196 112 M100 112 L196 112" stroke="${Dk}" stroke-width="5" fill="none" stroke-linecap="round"/>
+    <circle cx="36" cy="90" r="17" fill="#262626" ${sw}/><circle cx="36" cy="90" r="8" fill="#555"/>
+    <circle cx="266" cy="84" r="7" fill="#fff6c8" stroke="${OUT}" stroke-width="3"/>
+    <rect x="262" y="104" width="22" height="9" rx="2" fill="#2a2a2a" ${sw}/>
+    <path d="M64 120 Q86 92 110 120" fill="#2a2a2a"/><path d="M206 120 Q228 92 252 120" fill="#2a2a2a"/>
+    ${tire(86,128,26)}${tire(228,128,26)}`;
+  if (m === 'spring') g = `
+    <ellipse cx="158" cy="146" rx="126" ry="7" fill="#000" opacity=".15"/>
+    <rect x="112" y="48" width="86" height="5" rx="2" fill="#2a2a2a"/>
+    <path d="M38 120 Q36 100 52 96 L82 92 Q104 60 142 56 L196 56 Q222 58 236 78 L262 90 Q277 94 277 110 L277 120 Q277 128 268 128 L46 128 Q38 128 38 120 Z" fill="${C}" ${sw}/>
+    ${shine('M52 100 L84 96 L82 102 L52 105 Z')}
+    <path d="M96 86 Q112 64 142 62 L162 62 L162 86 Z" fill="${GLASS}" ${sw}/>
+    <path d="M170 62 L194 62 Q214 64 226 86 L170 86 Z" fill="${GLASS}" ${sw}/>
+    <path d="M58 128 Q84 94 110 128 Z" fill="#2a2a2a"/><path d="M206 128 Q232 94 258 128 Z" fill="#2a2a2a"/>
+    <path d="M40 116 L276 116" stroke="#2a2a2a" stroke-width="6"/>
+    <path d="M256 92 L274 98 L270 104 L254 100 Z" fill="#fff6c8" ${sw}/>
+    <text x="150" y="108" font-size="11" font-weight="800" fill="${Dk}" font-family="system-ui">⚡</text>
+    ${tire(84,128,20)}${tire(232,128,20)}`;
+  if (m === 'smart') g = `
+    <ellipse cx="160" cy="146" rx="90" ry="7" fill="#000" opacity=".15"/>
+    <path d="M90 126 Q80 126 80 118 L80 94 Q82 82 96 80 L110 40 Q116 30 132 30 L184 30 Q208 32 218 60 L228 86 Q238 90 238 106 L238 118 Q238 126 230 126 Z" fill="${C}" ${sw}/>
+    <path d="M112 36 Q118 31 132 31 L184 31 Q200 33 208 46 L114 46 Z" fill="#2a2a2a"/>
+    <path d="M104 80 L116 40 Q120 34 132 34 L182 34 M170 36 L170 122" stroke="#c9ccd1" stroke-width="9" fill="none" stroke-linecap="round"/>
+    <path d="M104 80 L116 40 Q120 34 132 34 L182 34 M170 36 L170 122" stroke="${OUT}" stroke-width="2" fill="none" opacity=".5"/>
+    <path d="M122 50 L162 50 L162 74 L112 74 Z" fill="${GLASS}" ${sw}/>
+    <path d="M178 50 L192 50 Q204 52 210 74 L178 74 Z" fill="${GLASS}" ${sw}/>
+    ${shine('M90 92 L104 90 L103 96 L90 98 Z')}
+    <path d="M222 90 L236 96 L232 102 L220 98 Z" fill="#fff6c8" ${sw}/>
+    <rect x="80" y="98" width="7" height="10" rx="2" fill="#e33b2e" stroke="${OUT}" stroke-width="3"/>
+    ${tire(110,126,19)}${tire(210,126,19)}`;
+  if (m === 'trailer') g = `
+    <ellipse cx="168" cy="146" rx="110" ry="7" fill="#000" opacity=".15"/>
+    <path d="M78 112 L22 116 L22 122 L78 122 Z" fill="#2a2a2a" ${sw}/>
+    <circle cx="20" cy="119" r="7" fill="#2a2a2a" ${sw}/>
+    <rect x="76" y="70" width="186" height="50" rx="5" fill="${C}" ${sw}/>
+    <rect x="76" y="70" width="186" height="10" rx="4" fill="${L}" ${sw}/>
+    ${[110,150,190,230].map(x=>`<path d="M${x} 84 L${x} 116" stroke="${Dk}" stroke-width="3"/>`).join('')}
+    <path d="M140 120 Q168 90 196 120" fill="#2a2a2a" ${sw}/>
+    <rect x="256" y="96" width="8" height="10" rx="2" fill="#e33b2e" stroke="${OUT}" stroke-width="3"/>
+    ${tire(168,128,20)}`;
+  return `<svg class="toon" viewBox="0 0 300 160" aria-hidden="true">${g}</svg>`;
+}
+function scene(c){
+  const m = modelOf(c);
+  const hills = m==='samurai'
+    ? `<path d="M0 120 L60 60 L100 95 L150 40 L210 100 L250 70 L300 110 L300 160 L0 160 Z" fill="#9db4a0"/><path d="M150 40 L165 55 L150 52 L138 56 Z" fill="#fff"/>`
+    : `<path d="M0 118 Q80 80 160 110 T300 100 L300 160 L0 160 Z" fill="#b9d7b0"/>`;
+  return `<svg class="scene" viewBox="0 0 300 160" preserveAspectRatio="xMidYMid slice" aria-hidden="true"><circle cx="196" cy="30" r="14" fill="#ffe08a"/>${hills}<rect x="0" y="138" width="300" height="22" fill="#8b9096"/><path d="M0 149 L300 149" stroke="#fff" stroke-width="2" stroke-dasharray="14 12" opacity=".8"/></svg>`;
+}
+
 function typeOf(c){
   if (c.type) return c.type;
   const n = (c.name||'').toLowerCase();
@@ -183,7 +284,7 @@ async function setPhoto(id, file){
   try{ save(); }catch(_){}
   render();
 }
-let photoFor = null;
+let photoFor = null, colorFor = null;
 
 function load(){ try{ cars = JSON.parse(localStorage.getItem(KEY) || '[]'); }catch(_){ cars = []; } cars.sort((a,b)=>(a.order||0)-(b.order||0)); }
 function save(){ try{ localStorage.setItem(KEY, JSON.stringify(cars)); }catch(_){ } }
@@ -267,9 +368,9 @@ function render(){
     const t = typeOf(c);
     return `
     <article class="car" data-id="${esc(c.id)}">
-      <div class="hero" style="--g:${GRAD[t]}">
-        ${c.photo ? `<img class="ph" src="${c.photo}" alt="">` : SIL[t]}
-        <button class="cam" data-photo title="Poză">📷</button>
+      <div class="hero ${c.photo?'':'toonbg'}" style="--g:${GRAD[t]}">
+        ${c.photo ? `<img class="ph" src="${c.photo}" alt="">` : scene(c) + toon(c)}
+        <div class="hbtns"><button class="cam" data-color title="Culoare">🎨</button><button class="cam" data-photo title="Poză">📷</button>${c.photo?'<button class="cam" data-unphoto title="Desen">✏️</button>':''}</div>
         <div class="hc">
           <div><span class="rplate"><i>RO</i><em>${esc(fmtPlate(c.plate))}</em></span><div class="nm2" style="margin-top:8px">${esc(c.name)}</div><div class="nx">${nx ? esc(nx) : 'totul în regulă'}</div></div>
         </div>
@@ -308,6 +409,8 @@ function icsFor(c, k, due){
 
 document.addEventListener('click', e => {
   if (e.target.matches('[data-close]')){ e.target.closest('.sheet').classList.remove('on'); return; }
+  if (e.target.matches('[data-color]')){ colorFor = e.target.closest('.car').dataset.id; const c = cars.find(x=>x.id===colorFor); $('#colorIn').value = c.color || '#c9ccd1'; $('#colorIn').click(); return; }
+  if (e.target.matches('[data-unphoto]')){ const c = cars.find(x=>x.id===e.target.closest('.car').dataset.id); delete c.photo; save(); render(); return; }
   if (e.target.matches('[data-photo]')){ photoFor = e.target.closest('.car').dataset.id; $('#photoIn').value=''; $('#photoIn').click(); return; }
   const row = e.target.closest('.row'), car = e.target.closest('.car');
   if (row && car){ const id = car.dataset.id, key = row.dataset.k; openEd = (openEd && openEd.id===id && openEd.key===key) ? null : {id,key}; render(); return; }
@@ -375,6 +478,7 @@ function importText(t){
   }catch(_){ if (msg) msg.textContent = 'Nu am găsit linkul. Copiază-l din nou din Claude.'; }
 }
 
+$('#colorIn').oninput = e => { const c = cars.find(x=>x.id===colorFor); if (c){ c.color = e.target.value; save(); render(); } };
 $('#photoIn').onchange = e => { const f = e.target.files[0]; if (f && photoFor) setPhoto(photoFor, f); };
 
 render();
