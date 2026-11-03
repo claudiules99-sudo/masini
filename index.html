@@ -182,8 +182,9 @@ function modelOf(c){
   if (/remorc|trailer/.test(n)) return 'trailer';
   return 'a4';
 }
+const MCOL = {a4:'#8d939b', samurai:'#c8312b', spring:'#2f6fd0', smart:'#2b2d32', trailer:'#b7bcc2'};
 function toon(c){
-  const C = c.color || '#c9ccd1', L = shade(C,.35), Dk = shade(C,-.35);
+  const C = c.color || MCOL[modelOf(c)] || '#c9ccd1', L = shade(C,.35), Dk = shade(C,-.35);
   const sw = `stroke="${OUT}" stroke-width="4" stroke-linejoin="round"`;
   const shine = d => `<path d="${d}" fill="#fff" opacity=".35"/>`;
   const m = modelOf(c);
@@ -409,7 +410,7 @@ function icsFor(c, k, due){
 
 document.addEventListener('click', e => {
   if (e.target.matches('[data-close]')){ e.target.closest('.sheet').classList.remove('on'); return; }
-  if (e.target.matches('[data-color]')){ colorFor = e.target.closest('.car').dataset.id; const c = cars.find(x=>x.id===colorFor); $('#colorIn').value = c.color || '#c9ccd1'; $('#colorIn').click(); return; }
+  if (e.target.matches('[data-color]')){ colorFor = e.target.closest('.car').dataset.id; const c = cars.find(x=>x.id===colorFor); $('#colorIn').value = c.color || MCOL[modelOf(c)] || '#c9ccd1'; $('#colorIn').click(); return; }
   if (e.target.matches('[data-unphoto]')){ const c = cars.find(x=>x.id===e.target.closest('.car').dataset.id); delete c.photo; save(); render(); return; }
   if (e.target.matches('[data-photo]')){ photoFor = e.target.closest('.car').dataset.id; $('#photoIn').value=''; $('#photoIn').click(); return; }
   const row = e.target.closest('.row'), car = e.target.closest('.car');
