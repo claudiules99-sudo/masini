@@ -148,7 +148,7 @@ function monthSum(m) {
   const mira = concerts().filter(c => mkey(c.date) === m && c.st !== "exclus").reduce((s, c) => s + miraLei(c), 0);
   const evs = moneyEvents().filter(e => mkey(e.date || "") === m);
   const ev = evs.reduce((s, e) => s + (+e.amount || 0), 0), subs = evs.reduce((s, e) => s + subsTot(e), 0);
-  const ed = expDoc(m), fixed = (cfg().fixed || []).reduce((s, f) => s + (+f.a || 0), 0), extra = (ed.extra || []).reduce((s, x) => s + (+x.amount || 0), 0);
+  const ed = expDoc(m), fixed = (cfg().fixed || []).reduce((s, f) => s + (+f.a || 0), 0), extra = (ed.extra || []).filter(x => !x.ii).reduce((s, x) => s + (+x.amount || 0), 0); // cheltuielile firmei (II) nu intră la cheltuielile lunare
   const inc = ore + mira + ev, out = fixed + extra + subs;
   return { ore, mira, ev, subs, fixed, extra, inc, out, net: inc - out };
 }
@@ -499,21 +499,24 @@ const CATS = ["Casă", "Combustibil", "Mașină", "Echipament", "Materiale", "M�
 const CATCOL = { "Fixe": "var(--ink)", "Subcontractori": "var(--exp)", "Casă": "#9B8CFF", "Combustibil": "#FF6B9A", "Mașină": "#6AA8FF", "Echipament": "#49D3C1", "Materiale": "#C9A26B", "Mâncare": "#8FD14F", "Reverb": "#F27BD0", "Altele": "var(--faint)" };
 function baniLuna() {
   const m = S.month, ed = expDoc(m), s = monthSum(m), groups = { Fixe: s.fixed, Subcontractori: s.subs };
-  (ed.extra || []).forEach(x => groups[x.cat || "Altele"] = (groups[x.cat || "Altele"] || 0) + (+x.amount || 0));
+  (ed.extra || []).filter(x => !x.ii).forEach(x => groups[x.cat || "Altele"] = (groups[x.cat || "Altele"] || 0) + (+x.amount || 0));
   const tot = Object.values(groups).reduce((a, b) => a + b, 0) || 1; let acc = 0; const R = 50, C = 2 * Math.PI * R;
   const arcs = Object.entries(groups).filter(([, v]) => v > 0).map(([k, v]) => { const len = v / tot * C, o = `<circle r="${R}" cx="60" cy="60" fill="none" stroke="${CATCOL[k] || "var(--faint)"}" stroke-width="16" stroke-dasharray="${len} ${C - len}" stroke-dashoffset="${-acc}" transform="rotate(-90 60 60)"/>`; acc += len; return o; }).join("");
   return `<section class="panel"><div class="bar"><div><div class="sub">Ies în ${MONTHS[+m.slice(5) - 1]}</div><div class="num" style="font-size:34px;font-weight:700">${k0(s.out)} lei</div></div><span class="sp"></span><div style="text-align:right"><div class="sub">Rămâne</div><div class="num ${s.net < 0 ? "bad" : "ok"}" style="font-size:24px;font-weight:700">${k0(s.net)}</div></div></div>
     <div class="donut" style="margin-top:10px"><svg viewBox="0 0 120 120"><circle r="${R}" cx="60" cy="60" fill="none" stroke="var(--well)" stroke-width="16"/>${arcs}</svg><div class="lg">${Object.entries(groups).filter(([, v]) => v > 0).map(([k, v]) => `<div style="--c:${CATCOL[k] || "var(--faint)"}"><span><i></i>${k}</span><b class="num">${k0(v)}</b></div>`).join("") || `<div class="mute">Nimic încă.</div>`}</div></div></section>
   <section class="panel"><h2>Plăți fixe</h2>${(cfg().fixed || []).map(f => `<label class="check" style="border-top:1px solid var(--line);padding:10px 0"><input type="checkbox" ${(ed.paid || {})[f.id] ? "checked" : ""} onchange="fxPaid('${esc(f.id)}',this.checked)"><span class="box"></span><span style="flex:1">${esc(f.n)}</span><b class="num" style="font-size:18px">${k0(f.a)}</b></label>`).join("") || `<div class="empty">Adaugă plăți fixe din Setări.</div>`}</section>
   <section class="panel"><div class="bar" style="margin-bottom:6px"><h2 style="margin:0">Alte cheltuieli</h2><span class="sp"></span><button class="btn sm p" onclick="openExp()">+ Adaugă</button></div>
-    ${(ed.extra || []).slice().sort((a, b) => (b.date || "").localeCompare(a.date || "")).map(x => `<div class="row"><span class="dot" style="width:9px;height:9px;border-radius:50%;background:${CATCOL[x.cat] || "var(--faint)"}"></span><div class="l"><div class="t">${esc(x.desc)}</div><div class="s">${x.date ? ro(x.date) : ""} · ${esc(x.cat || "")}${x.ii ? " · II" : ""}</div></div><div class="v">${k0(x.amount)}</div><button class="btn sm ghost" onclick="delExp('${esc(x.id)}')">✕</button></div>`).join("") || `<div class="empty">Nimic luna asta.</div>`}</section>`;
+    ${expRows((ed.extra || []).filter(x => !x.ii)) || `<div class="empty">Nimic luna asta.</div>`}</section>
+  ${(ed.extra || []).some(x => x.ii) ? `<section class="panel"><div class="bar" style="margin-bottom:6px"><h2 style="margin:0">Cheltuieli firmă</h2><span class="sp"></span><span class="num" style="font-size:20px;font-weight:600">${k0((ed.extra || []).filter(x => x.ii).reduce((s, x) => s + (+x.amount || 0), 0))}</span></div>
+    <div class="small mute" style="margin-bottom:4px">Pe II, deductibile. Nu intră la cheltuielile lunii, se scad la profit și taxe.</div>${expRows((ed.extra || []).filter(x => x.ii))}</section>` : ""}`;
 }
+function expRows(list) { return list.slice().sort((a, b) => (b.date || "").localeCompare(a.date || "")).map(x => `<div class="row"><span class="dot" style="width:9px;height:9px;border-radius:50%;background:${CATCOL[x.cat] || "var(--faint)"}"></span><div class="l"><div class="t">${esc(x.desc)}</div><div class="s">${x.date ? ro(x.date) : ""} · ${esc(x.cat || "")}</div></div><div class="v">${k0(x.amount)}</div><button class="btn sm ghost" onclick="delExp('${esc(x.id)}')">✕</button></div>`).join(""); }
 window.fxPaid = (id, v) => { const m = S.month, ed = clone(expDoc(m)); ed.paid = ed.paid || {}; ed.paid[id] = v; put("exp/" + m, ed); render(); };
 window.delExp = id => { const m = S.month, ed = clone(expDoc(m)); ed.extra = (ed.extra || []).filter(x => x.id !== id); put("exp/" + m, ed); render(); };
 window.openExp = () => sheet("Cheltuială", `<label class="field"><span>Ce</span><input id="xD" placeholder="ex. cabluri XLR, motorină"></label>
   <div class="g2"><label class="field"><span>Sumă (lei)</span><input id="xA" type="number" inputmode="decimal"></label><label class="field"><span>Data</span><input id="xT" type="date" value="${today().slice(0, 7) === S.month ? today() : S.month + "-01"}"></label></div>
   <div class="field"><span>Categorie</span><div class="bar" id="xC">${CATS.map((c, i) => `<button class="chip" style="height:32px;padding:0 12px;font-size:14px;${i === 7 ? "background:var(--ink);color:var(--bg)" : ""}" data-c="${c}" onclick="document.querySelectorAll('#xC .chip').forEach(b=>{b.style.background='';b.style.color=''});this.style.background='var(--ink)';this.style.color='var(--bg)';this.parentNode.dataset.v='${c}'">${c}</button>`).join("")}</div></div>
-  <label class="check"><input type="checkbox" id="xII"><span class="box"></span>Cheltuială pe II (combustibilul se scade 50%)</label>
+  <label class="check"><input type="checkbox" id="xII"><span class="box"></span>Cheltuială pe firmă (II), deductibilă — combustibilul doar 50%</label>
   <button class="btn p full" style="margin-top:10px" onclick="addExp()">Adaugă cheltuiala</button>`);
 window.addExp = () => { const desc = $("#xD").value.trim(), amount = +$("#xA").value, date = $("#xT").value; if (!desc || !amount) { toast("Pune descrierea și suma"); return; } const m = mkey(date || S.month + "-01"), ed = clone(expDoc(m)); ed.extra = ed.extra || []; ed.extra.push({ id: uid(), desc, amount, date, cat: $("#xC").dataset.v || "Altele", ii: $("#xII").checked }); put("exp/" + m, ed); closeSheet(); render(); toast("Cheltuiala a fost adăugată"); };
 function baniProfit() {
