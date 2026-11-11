@@ -118,7 +118,7 @@
     <button id="impBtn">Încarcă date</button>
     <button id="resetCol">Culori implicite</button>
   </div>
-  <div class="sub" style="text-align:center;margin-top:10px">versiunea 7</div>
+  <div class="sub" style="text-align:center;margin-top:10px">versiunea 8</div>
   <div style="display:none">
   </div>
 </div>
@@ -459,27 +459,32 @@ $('#expBtn').onclick = () => {
 };
 $('#impBtn').onclick = () => {
   $('#ioTitle').textContent = 'Încarcă date';
-  $('#ioHint').textContent = 'Lipește linkul de backup (sau codul). Înlocuiește datele de acum.';
-  $('#ioText').value = ''; $('#ioAct').textContent = 'Încarcă';
-  $('#ioAct').onclick = () => {
-    try{
-      let t = $('#ioText').value.trim(); const i = t.indexOf('#import='); if (i >= 0) t = t.slice(i+8);
-      const data = t.startsWith('[') ? JSON.parse(t) : JSON.parse(b64d(t));
-      if (!Array.isArray(data)) throw 0;
-      cars = data; save(); load(); render(); $('#ioSheet').classList.remove('on');
-    }catch(_){ $('#ioHint').textContent = 'Cod invalid.'; }
+  $('#ioHint').textContent = 'Lipește linkul primit de la Claude (actualizare sau backup), sau apasă direct butonul.';
+  $('#ioText').value = ''; $('#ioAct').textContent = '📋 Lipește și încarcă';
+  $('#ioAct').onclick = async () => {
+    let t = $('#ioText').value.trim();
+    if (!t){ try{ t = (await navigator.clipboard.readText()).trim(); }catch(_){ } }
+    if (importText(t)) $('#ioSheet').classList.remove('on'); else $('#ioHint').textContent = 'Cod invalid.';
   };
   $('#ioSheet').classList.add('on');
 };
 
+function applyPatch(t){
+  const i = t.indexOf('#patch='); if (i < 0) return false;
+  const p = JSON.parse(b64d(t.slice(i+7).trim()));
+  const merge = (a,b) => { for (const k in b){ if (b[k] && typeof b[k]==='object' && !Array.isArray(b[k])) { a[k] = merge(a[k]||{}, b[k]); } else a[k] = b[k]; } return a; };
+  for (const id in p){ const c = cars.find(x=>x.id===id); if (c) merge(c, p[id]); }
+  save(); render(); return true;
+}
 function importText(t){
   const msg = $('#codeMsg');
   try{
+    if (applyPatch(t)) return true;
     const i = t.indexOf('#import='); if (i >= 0) t = t.slice(i+8);
     const data = t.startsWith('[') ? JSON.parse(t) : JSON.parse(b64d(t));
     if (!Array.isArray(data) || !data.length) throw 0;
     const old = Object.fromEntries(cars.map(c=>[c.id,c.photo])); data.forEach(d=>{ if(!d.photo && old[d.id]) d.photo = old[d.id]; });
-    cars = data; save(); load(); render();
+    cars = data; save(); load(); render(); return true;
   }catch(_){ if (msg) msg.textContent = 'Nu am găsit linkul. Copiază-l din nou din Claude.'; }
 }
 
