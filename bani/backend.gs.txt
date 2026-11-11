@@ -1,0 +1,229 @@
+// Parser ICS minimal cu expandare RRULE (WEEKLY/MONTHLY/YEARLY, INTERVAL, UNTIL, COUNT, BYDAY simplu),
+// EXDATE, RECURRENCE-ID și STATUS:CANCELLED. Lucrează pe ore locale (Europe/Bucharest) ca șiruri.
+// Folosit identic în Apps Script și în teste.
+function icsEvents(text, fromYmd, toYmd, zToLocal) {
+  var lines = text.replace(/\r?\n[ \t]/g, '').split(/\r?\n/);
+  var evs = [], cur = null;
+  for (var i = 0; i < lines.length; i++) {
+    var l = lines[i];
+    if (l === 'BEGIN:VEVENT') { cur = {}; continue; }
+    if (l === 'END:VEVENT') { if (cur) evs.push(cur); cur = null; continue; }
+    if (!cur) continue;
+    var c = l.indexOf(':'); if (c < 0) continue;
+    var head = l.slice(0, c), val = l.slice(c + 1), name = head.split(';')[0];
+    if (name === 'EXDATE') { (cur.ex = cur.ex || []).push.apply(cur.ex, val.split(',').map(function (v) { return norm(v, head); })); }
+    else if (name === 'DTSTART' || name === 'DTEND' || name === 'RECURRENCE-ID') cur[name] = norm(val, head);
+    else if (name === 'SUMMARY') cur.SUMMARY = val.replace(/\\,/g, ',').replace(/\\;/g, ';').replace(/\\n/g, ' ').replace(/\\\\/g, '\\');
+    else if (name === 'RRULE' || name === 'UID' || name === 'STATUS') cur[name] = val;
+  }
+  function norm(v, head) { // -> 'YYYYMMDDTHHMM' local
+    v = v.trim();
+    if (/Z$/.test(v)) return zToLocal(v);
+    if (/^\d{8}$/.test(v)) return v + 'T0000';
+    return v.slice(0, 13);
+  }
+  var lo = fromYmd.replace(/-/g, '') + 'T0000', hi = toYmd.replace(/-/g, '') + 'T0000';
+  var overrides = {}, out = [];
+  evs.forEach(function (e) { if (e['RECURRENCE-ID']) overrides[e.UID + '|' + e['RECURRENCE-ID']] = e; });
+  function push(e, start) {
+    if (start < lo || start >= hi) return;
+    if (e.STATUS === 'CANCELLED') return;
+    out.push({ uid: e.UID, start: start, summary: (e.SUMMARY || '').trim() });
+  }
+  evs.forEach(function (e) {
+    if (!e.DTSTART || e['RECURRENCE-ID']) { if (e.DTSTART && e['RECURRENCE-ID']) push(e, e.DTSTART); return; }
+    if (!e.RRULE) { push(e, e.DTSTART); return; }
+    var r = {}; e.RRULE.split(';').forEach(function (p) { var kv = p.split('='); r[kv[0]] = kv[1]; });
+    var until = r.UNTIL ? (/Z$/.test(r.UNTIL) ? zToLocal(r.UNTIL) : (r.UNTIL.length === 8 ? r.UNTIL + 'T2359' : r.UNTIL.slice(0, 13))) : null;
+    var count = r.COUNT ? +r.COUNT : null, interval = +(r.INTERVAL || 1);
+    var ex = {}; (e.ex || []).forEach(function (x) { ex[x] = 1; });
+    var t = e.DTSTART.slice(9), d = ymdToDate(e.DTSTART), n = 0, guard = 0;
+    var days = r.BYDAY && r.FREQ === 'WEEKLY' ? r.BYDAY.split(',').map(function (s) { return ['SU','MO','TU','WE','TH','FR','SA'].indexOf(s.slice(-2)); }) : null;
+    while (guard++ < 5000) {
+      var cands = [];
+      if (days) { var wk = new Date(d); wk.setDate(wk.getDate() - wk.getDay()); days.forEach(function (wd) { var x = new Date(wk); x.setDate(x.getDate() + wd); if (x >= ymdToDate(e.DTSTART)) cands.push(x); }); cands.sort(function (a, b) { return a - b; }); }
+      else cands = [new Date(d)];
+      var stop = false;
+      for (var k = 0; k < cands.length; k++) {
+        var s = dateToYmd(cands[k]) + t;
+        if (until && s > until) { stop = true; break; }
+        if (count && n >= count) { stop = true; break; }
+        n++;
+        if (s >= hi) { stop = true; break; }
+        if (ex[s]) continue;
+        var ov = overrides[e.UID + '|' + s];
+        if (ov) continue; // instanța modificată e tratată separat
+        push(e, s);
+      }
+      if (stop) break;
+      if (r.FREQ === 'WEEKLY') d.setDate(d.getDate() + 7 * interval);
+      else if (r.FREQ === 'DAILY') d.setDate(d.getDate() + interval);
+      else if (r.FREQ === 'MONTHLY') d.setMonth(d.getMonth() + interval);
+      else if (r.FREQ === 'YEARLY') d.setFullYear(d.getFullYear() + interval);
+      else break;
+    }
+  });
+  out.sort(function (a, b) { return a.start < b.start ? -1 : 1; });
+  return out.map(function (o) { return { date: o.start.slice(0, 4) + '-' + o.start.slice(4, 6) + '-' + o.start.slice(6, 8), time: o.start.slice(9, 11) + ':' + o.start.slice(11, 13), summary: o.summary }; });
+  function ymdToDate(s) { return new Date(+s.slice(0, 4), +s.slice(4, 6) - 1, +s.slice(6, 8)); }
+  function dateToYmd(x) { return '' + x.getFullYear() + ('0' + (x.getMonth() + 1)).slice(-2) + ('0' + x.getDate()).slice(-2) + 'T'; }
+}
+/**
+ * Bani — backend pe contul Google al lui Claudiu.
+ * Ține datele aplicației (sincronizate între telefon și laptop), citește calendarele,
+ * citește facturi cu Gemini și pune amintirea de seară în Google Calendar.
+ *
+ * Proprietăți (Project Settings → Script properties):
+ *   TOKEN        cheia secretă a aplicației (obligatoriu)
+ *   ICS_URL      linkul public iCloud al calendarului „Ore” (https://...)
+ *   MIRA_CAL     ID-ul calendarului MIRA (mirabookingevents@gmail.com)
+ *   APP_URL      adresa aplicației (pentru linkul din notificare)
+ *   GEMINI_KEY   cheie Google AI Studio (opțional, pentru citirea facturilor)
+ *   GEMINI_MODEL modelul Gemini (opțional, implicit gemini-2.5-flash)
+ */
+
+var TZ = 'Europe/Bucharest';
+var CHUNK = 8000;
+
+function prop_(k) { return PropertiesService.getScriptProperties().getProperty(k) || ''; }
+function json_(o) { return ContentService.createTextOutput(JSON.stringify(o)).setMimeType(ContentService.MimeType.JSON); }
+function auth_(t) { var tok = prop_('TOKEN'); return tok && t === tok; }
+
+/* ---------- stocare documente ---------- */
+function readAll_() {
+  var all = PropertiesService.getScriptProperties().getProperties(), docs = {}, parts = {};
+  Object.keys(all).forEach(function (k) {
+    if (k.indexOf('d:') !== 0) return;
+    var m = k.match(/^d:(.+?)(?:#(\d+))?$/);
+    if (m[2] === undefined) { if (all[k] !== '__chunked__') docs[m[1]] = all[k]; }
+    else (parts[m[1]] = parts[m[1]] || [])[+m[2]] = all[k];
+  });
+  Object.keys(parts).forEach(function (p) { docs[p] = parts[p].join(''); });
+  var out = {};
+  Object.keys(docs).forEach(function (p) { try { out[p] = JSON.parse(docs[p]); } catch (e) {} });
+  return out;
+}
+function writeDoc_(path, data) {
+  var sp = PropertiesService.getScriptProperties();
+  deleteDoc_(path);
+  var s = JSON.stringify(data);
+  if (s.length <= CHUNK) { sp.setProperty('d:' + path, s); return; }
+  var o = {}; o['d:' + path] = '__chunked__';
+  for (var i = 0, n = 0; i < s.length; i += CHUNK, n++) o['d:' + path + '#' + n] = s.slice(i, i + CHUNK);
+  sp.setProperties(o);
+}
+function deleteDoc_(path) {
+  var sp = PropertiesService.getScriptProperties();
+  var keys = sp.getKeys();
+  keys.forEach(function (k) { if (k === 'd:' + path || k.indexOf('d:' + path + '#') === 0) sp.deleteProperty(k); });
+}
+
+/* ---------- HTTP ---------- */
+function doGet(e) {
+  var p = e.parameter || {};
+  if (!auth_(p.t)) return json_({ error: 'unauthorized' });
+  try {
+    if (p.a === 'all') return json_({ docs: readAll_(), at: Date.now() });
+    if (p.a === 'cal') return json_({ events: p.k === 'mira' ? miraEvents_(p.from, p.to) : oreEvents_(p.from, p.to) });
+    if (p.a === 'ping') return json_({ ok: true, gemini: !!prop_('GEMINI_KEY') });
+    return json_({ error: 'unknown action' });
+  } catch (err) { return json_({ error: String(err) }); }
+}
+function doPost(e) {
+  var b; try { b = JSON.parse(e.postData.contents); } catch (x) { return json_({ error: 'bad json' }); }
+  if (!auth_(b.t)) return json_({ error: 'unauthorized' });
+  var lock = LockService.getScriptLock(); lock.waitLock(20000);
+  try {
+    if (b.a === 'set') { writeDoc_(b.p, b.d); return json_({ ok: true }); }
+    if (b.a === 'del') { deleteDoc_(b.p); return json_({ ok: true }); }
+    if (b.a === 'bulk') { (b.ops || []).forEach(function (o) { if (o.d === null) deleteDoc_(o.p); else writeDoc_(o.p, o.d); }); return json_({ ok: true }); }
+    if (b.a === 'inv') return json_({ sum: readInvoice_(b.mime, b.b64) });
+    return json_({ error: 'unknown action' });
+  } catch (err) { return json_({ error: String(err) }); }
+  finally { lock.releaseLock(); }
+}
+
+/* ---------- calendare ---------- */
+function zToLocal_(v) {
+  var d = new Date(Date.UTC(+v.slice(0, 4), +v.slice(4, 6) - 1, +v.slice(6, 8), +v.slice(9, 11), +v.slice(11, 13)));
+  return Utilities.formatDate(d, TZ, "yyyyMMdd'T'HHmm");
+}
+function icsText_() {
+  var cache = CacheService.getScriptCache();
+  var url = prop_('ICS_URL').replace(/^webcal:/, 'https:');
+  var r = UrlFetchApp.fetch(url, { muteHttpExceptions: true });
+  if (r.getResponseCode() !== 200) throw new Error('iCloud a răspuns ' + r.getResponseCode());
+  return r.getContentText();
+}
+function oreEvents_(from, to) {
+  var cache = CacheService.getScriptCache(), key = 'ore:' + from + ':' + to;
+  var hit = cache.get(key); if (hit) return JSON.parse(hit);
+  var evs = icsEvents(icsText_(), from, to, zToLocal_);
+  try { cache.put(key, JSON.stringify(evs), 600); } catch (e) {}
+  return evs;
+}
+function miraEvents_(from, to) {
+  var cal = CalendarApp.getCalendarById(prop_('MIRA_CAL') || 'mirabookingevents@gmail.com');
+  if (!cal) throw new Error('Calendarul MIRA nu e accesibil din contul ăsta');
+  var a = new Date(from + 'T00:00:00'), b = new Date(to + 'T00:00:00');
+  return cal.getEvents(a, b).map(function (ev) {
+    var s = ev.getStartTime();
+    return { id: String(ev.getId()).replace(/@google\.com$/, ''), date: Utilities.formatDate(s, TZ, 'yyyy-MM-dd'),
+      time: ev.isAllDayEvent() ? '' : Utilities.formatDate(s, TZ, 'HH:mm'), summary: ev.getTitle(), desc: ev.getDescription() || '' };
+  });
+}
+
+/* ---------- facturi (Gemini) ---------- */
+function readInvoice_(mime, b64) {
+  var key = prop_('GEMINI_KEY'); if (!key) throw new Error('no_gemini');
+  var model = prop_('GEMINI_MODEL') || 'gemini-2.5-flash';
+  var prompt = 'Extrage datele de plată din această factură românească, ca să fie plătită prin transfer bancar. ' +
+    'Clientul este LES CLAUDIU I.I. — NU-l confunda cu furnizorul. Răspunde DOAR cu JSON: ' +
+    '{"furnizor":string,"cui":string|null,"iban":string|null,"banca":string|null,"nr":string|null,"data":string|null,' +
+    '"scadenta":string|null,"suma":number|null,"moneda":string,"detalii":string}. "detalii" = max 60 caractere, ' +
+    'de forma "Contravaloare factura SERIE NR din DATA". "suma" = totalul de plată.';
+  var body = { contents: [{ parts: [{ text: prompt }, { inline_data: { mime_type: mime, data: b64 } }] }],
+    generationConfig: { responseMimeType: 'application/json', temperature: 0 } };
+  var r = UrlFetchApp.fetch('https://generativelanguage.googleapis.com/v1beta/models/' + model + ':generateContent?key=' + key,
+    { method: 'post', contentType: 'application/json', payload: JSON.stringify(body), muteHttpExceptions: true });
+  if (r.getResponseCode() !== 200) throw new Error('gemini ' + r.getResponseCode() + ': ' + r.getContentText().slice(0, 200));
+  var j = JSON.parse(r.getContentText());
+  var txt = j.candidates[0].content.parts.map(function (p) { return p.text || ''; }).join('');
+  var s = JSON.parse(txt.replace(/^```json|```$/g, '').trim());
+  if (s.iban) s.iban = String(s.iban).replace(/\s+/g, '').toUpperCase();
+  if (s.suma != null) s.suma = +s.suma;
+  return s;
+}
+
+/* ---------- notificare de seară (Google Calendar) ---------- */
+// La 19:50 verifică orele de azi; dacă sunt neconfirmate, pune un eveniment la 20:15 în calendarul tău Google,
+// cu alertă, care te trimite în aplicație. Evenimentele vechi de acest fel se șterg singure.
+function splitKids_(s) { return s.trim().replace(/\s+/g, ' ').split(/\s+(?:si|și|\+|&)\s+/i); }
+var TAG = '[bani]';
+function notifyLessons() {
+  var cal = CalendarApp.getDefaultCalendar(), now = new Date();
+  // curăță amintirile din zilele trecute
+  cal.getEvents(new Date(now.getTime() - 14 * 864e5), new Date(now.getTime() - 3600e3)).forEach(function (e) { if ((e.getDescription() || '').indexOf(TAG) >= 0) e.deleteEvent(); });
+  var today = Utilities.formatDate(now, TZ, 'yyyy-MM-dd'), tom = Utilities.formatDate(new Date(now.getTime() + 864e5), TZ, 'yyyy-MM-dd');
+  var docs = readAll_(), cfg = docs['cfg/main'] || {}, ignore = cfg.ignore || [];
+  var od = docs['ore/' + today.slice(0, 7)] || { d: {} }, done = (od.d || {})[today] || {};
+  var kids = [];
+  oreEvents_(today, tom).forEach(function (e) {
+    if (ignore.indexOf(e.summary.trim().replace(/\s+/g, ' ')) >= 0) return;
+    splitKids_(e.summary).forEach(function (k) { if (!done[k]) kids.push(k); });
+  });
+  if (!kids.length) return;
+  var at = new Date(Utilities.formatDate(now, TZ, "yyyy-MM-dd'T'20:15:00XXX"));
+  var url = prop_('APP_URL');
+  var ev = cal.createEvent('Bani: confirmă orele (' + kids.length + ')', at, new Date(at.getTime() + 10 * 60e3),
+    { description: 'Azi: ' + kids.join(', ') + '\n' + (url ? url + '#ore' : '') + '\n' + TAG });
+  ev.removeAllReminders(); ev.addPopupReminder(0);
+}
+
+/** Rulează o dată, din editor: pornește verificarea zilnică la 19:50 și generează cheia aplicației. */
+function setup() {
+  ScriptApp.getProjectTriggers().forEach(function (t) { if (t.getHandlerFunction() === 'notifyLessons') ScriptApp.deleteTrigger(t); });
+  ScriptApp.newTrigger('notifyLessons').timeBased().everyDays(1).atHour(19).nearMinute(50).inTimezone(TZ).create();
+  if (!prop_('TOKEN')) PropertiesService.getScriptProperties().setProperty('TOKEN', Utilities.getUuid().replace(/-/g, ''));
+  Logger.log('TOKEN: ' + prop_('TOKEN'));
+}
