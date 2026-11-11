@@ -116,7 +116,7 @@ h3{font-family:var(--cond);font-weight:600;font-size:18px;margin:0}
 .kid{display:flex;align-items:center;gap:12px;background:var(--panel2);border:1px solid var(--line);border-radius:16px;padding:10px 12px;cursor:pointer;user-select:none;transition:background .2s,border-color .2s,transform .12s}
 .kid:active{transform:scale(.985)}
 .kid .av{width:40px;height:40px;border-radius:50%;display:grid;place-items:center;font-family:var(--cond);font-weight:700;font-size:17px;background:var(--well);color:var(--mute);flex:none;transition:all .2s}
-.kid .nm{font-weight:600}
+.kid .nm{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .kid .tm{font-size:13px;color:var(--mute)}
 .kid .st{font-family:var(--cond);font-weight:600;font-size:16px;color:var(--mute)}
 .kid.y{border-color:color-mix(in srgb,var(--ore) 50%,transparent);background:color-mix(in srgb,var(--ore) 12%,var(--panel2))}
@@ -125,6 +125,12 @@ h3{font-family:var(--cond);font-weight:600;font-size:18px;margin:0}
 .kid.n .nm{text-decoration:line-through;color:var(--mute)}
 .kid.n .av{background:color-mix(in srgb,var(--bad) 25%,var(--well));color:var(--bad)}
 .kid.n .st{color:var(--bad)}
+.kid .yn{display:flex;border:1px solid var(--line2);border-radius:11px;overflow:hidden;flex:none}
+.kid .yn button{height:36px;padding:0 12px;font-weight:600;font-size:14px;color:var(--mute);background:transparent;transition:background .15s,color .15s}
+.kid .yn button+button{border-left:1px solid var(--line2)}
+.kid .yn button.y.on{background:var(--ore);color:#06201C}
+.kid .yn button.n.on{background:var(--bad);color:#2A0606}
+.kid{cursor:default}
 .kid .hide{color:var(--faint);padding:6px}
 .pop{animation:pop .35s cubic-bezier(.2,1.6,.4,1)}
 @keyframes pop{0%{transform:scale(.6)}100%{transform:scale(1)}}

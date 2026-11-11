@@ -291,7 +291,7 @@ VIEWS.ore = () => {
     <div class="bar" style="margin-bottom:10px"><h2 style="margin:0">${dayName(S.day)}, ${+S.day.slice(8)} ${MONTHS[+S.day.slice(5, 7) - 1]}</h2><span class="sp"></span><span class="num" style="font-size:20px;font-weight:600">${k0(dayTot)} lei</span></div>
     ${ls.length ? `<div class="kids">${ls.map(kidRow).join("")}</div>` : `<div class="empty">Nicio oră în ziua asta.</div>`}
     <div class="bar" style="margin-top:12px">${anyPend && S.day <= td ? `<button class="btn p" onclick="allCame()">Toți au venit</button>` : ""}<span class="sp"></span><button class="btn sm ghost" onclick="openAddLesson()">+ oră manuală</button></div>
-    ${ls.length ? `<div class="small mute" style="margin-top:8px">Atinge un copil: a venit → absent → neconfirmat.</div>` : ""}
+    ${ls.length ? `<div class="small mute" style="margin-top:8px">Apasă din nou pe același buton ca să anulezi.</div>` : ""}
   </section>`;
 };
 function kidRow(l) {
@@ -299,14 +299,23 @@ function kidRow(l) {
   const key = esc(JSON.stringify({ d: l.date, n: l.name, src: l.src, id: l.id || "", raw: l.raw || "" }));
   const lbl = st.s === 1 ? `+${k0(st.r)}` : st.s === 0 ? "absent" : `${k0(st.r)} lei`;
   const canHide = l.src === "cal" && st.s == null && !(cfg().rates || {})[l.name] && !knownKid(l.name) && evCount(l.raw) <= 1;
-  return `<div class="kid ${cls}" data-k="${key}" onclick="cycleKid(this)"><div class="av">${st.s === 1 ? "✓" : esc(initials(l.name))}</div><div style="flex:1;min-width:0"><div class="nm">${esc(l.name)}</div><div class="tm">${l.time || ""}${l.src === "man" ? " · adăugată manual" : ""}</div></div>
+  return `<div class="kid ${cls}" data-k="${key}"><div class="av">${st.s === 1 ? "✓" : esc(initials(l.name))}</div><div style="flex:1;min-width:0"><div class="nm">${esc(l.name)}</div><div class="tm">${l.time || ""}${l.time ? " · " : ""}${k0(st.r)} lei${l.src === "man" ? " · manuală" : ""}</div></div>
     ${canHide ? `<button class="hide" title="Nu e oră" onclick="event.stopPropagation();ignoreEv('${esc(l.raw)}')"><svg viewBox="0 0 24 24" style="width:18px;height:18px"><path d="M3 3l18 18M10.6 6.1A9.8 9.8 0 0112 6c5 0 9 6 9 6a17 17 0 01-3.2 3.8M6.3 7.3A17 17 0 003 12s4 6 9 6a9 9 0 004.3-1.1"/></svg></button>` : ""}
-    <div class="st num">${lbl}</div></div>`;
+    <div class="yn"><button class="y ${st.s === 1 ? "on" : ""}" onclick="setKid(this,1)">A venit</button><button class="n ${st.s === 0 ? "on" : ""}" onclick="setKid(this,0)">Absent</button></div></div>`;
 }
 function evCount(raw) { let n = 0; Object.values(S.cal.ore).forEach(c => (c.ev || []).forEach(e => { if (normName(e.summary) === raw) n++; })); return n; }
 function knownKid(n) { return Object.values(coll("ore")).some(od => Object.values(od.d || {}).some(o => o[n] && o[n].s === 1)); }
 window.pickDay = d => { S.day = d; S.month = mkey(d); render(); };
 window.shiftWeek = n => { const d = parseD(S.day); d.setDate(d.getDate() + n); pickDay(ymd(d)); };
+window.setKid = (btn, v) => {
+  const el = btn.closest(".kid"), k = JSON.parse(el.dataset.k), m = mkey(k.d), od = clone(oreDoc(m)); od.d = od.d || {}; od.d[k.d] = od.d[k.d] || {};
+  const cur = od.d[k.d][k.n];
+  if (cur && cur.s === v) { if (k.src === "man") od.x = (od.x || []).filter(x => x.id !== k.id); delete od.d[k.d][k.n]; }
+  else od.d[k.d][k.n] = { s: v, r: cur ? cur.r : rateOf(k.n) };
+  put("ore/" + m, od); render();
+  const n = document.querySelector(`.kid[data-k='${CSS.escape(el.dataset.k)}'] .av`); if (n && v === 1) n.classList.add("pop");
+  if (navigator.vibrate) navigator.vibrate(8);
+};
 window.cycleKid = el => {
   const k = JSON.parse(el.dataset.k), m = mkey(k.d), od = clone(oreDoc(m)); od.d = od.d || {}; od.d[k.d] = od.d[k.d] || {};
   const cur = od.d[k.d][k.n];
