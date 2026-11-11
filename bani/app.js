@@ -143,14 +143,22 @@ const subsTot = e => (e.subs || []).reduce((s, x) => s + (+x.amount || 0), 0);
 const subDoc = x => x.doc !== false;
 const expDoc = m => doc("exp/" + m, { paid: {}, extra: [] });
 
+/* rate (eMAG etc.): din următoarea scadență, lunar, până se termină suma rămasă */
+function rateSchedule(p) {
+  const out = []; let rest = Math.round((+p.rest || 0) * 100) / 100, d = parseD(p.next), day = d.getDate(), i = 0;
+  while (rest > 0.009 && i < 60) { const a = Math.min(+p.a, rest); const dd = new Date(d.getFullYear(), d.getMonth() + i, 1); dd.setDate(Math.min(day, new Date(dd.getFullYear(), dd.getMonth() + 1, 0).getDate())); out.push({ date: ymd(dd), a: Math.round(a * 100) / 100 }); rest = Math.round((rest - a) * 100) / 100; i++; }
+  return out;
+}
+const rateDue = m => (cfg().rate || []).flatMap(p => rateSchedule(p).filter(x => mkey(x.date) === m).map(x => ({ ...x, id: p.id, n: p.n })));
 function monthSum(m) {
   const ore = oreSum(m).total;
   const mira = concerts().filter(c => mkey(c.date) === m && c.st !== "exclus").reduce((s, c) => s + miraLei(c), 0);
   const evs = moneyEvents().filter(e => mkey(e.date || "") === m);
   const ev = evs.reduce((s, e) => s + (+e.amount || 0), 0), subs = evs.reduce((s, e) => s + subsTot(e), 0);
   const ed = expDoc(m), fixed = (cfg().fixed || []).reduce((s, f) => s + (+f.a || 0), 0), extra = (ed.extra || []).filter(x => !x.ii).reduce((s, x) => s + (+x.amount || 0), 0); // cheltuielile firmei (II) nu intră la cheltuielile lunare
-  const inc = ore + mira + ev, out = fixed + extra + subs;
-  return { ore, mira, ev, subs, fixed, extra, inc, out, net: inc - out };
+  const rate = rateDue(m).reduce((s, x) => s + x.a, 0);
+  const inc = ore + mira + ev, out = fixed + rate + extra + subs;
+  return { ore, mira, ev, subs, fixed, rate, extra, inc, out, net: inc - out };
 }
 function taxYear(y) {
   const ys = String(y), t = today(), c = cfg();
@@ -215,14 +223,14 @@ VIEWS.acasa = () => {
   const unpaid = Object.values(invs()).filter(i => !i.paid);
   const subsDue = []; moneyEvents().forEach(e => (e.subs || []).forEach(x => { if (!x.paid && +x.amount) subsDue.push(x); }));
   const clientDue = moneyEvents().filter(e => +e.amount && !e.clientPaid && (e.date || "") <= td);
-  const ed = expDoc(S.month), fixedUn = (cfg().fixed || []).filter(f => !(ed.paid || {})[f.id]);
+  const ed = expDoc(S.month), fixedUn = [...(cfg().fixed || []).filter(f => !(ed.paid || {})[f.id]), ...rateDue(S.month).filter(x => !(ed.paid || {})["r:" + x.id])];
   const todo = [];
   if (os.pend) todo.push(["ore", `${os.pend} ${os.pend === 1 ? "oră de confirmat" : "ore de confirmat"}`, "", "var(--ore)"]);
   if (toBill.length) todo.push(["mira", `MIRA: ${toBill.length} de facturat`, lei(toBill.filter(x => x.st === "nefacturat").reduce((s, x) => s + miraLei(x), 0), false), "var(--mira)"]);
   if (unpaid.length) todo.push(["mira", `MIRA: ${unpaid.length} ${unpaid.length === 1 ? "factură neîncasată" : "facturi neîncasate"}`, "", "var(--mira)"]);
   if (clientDue.length) todo.push(["ev", `${clientDue.length} ${clientDue.length === 1 ? "eveniment neîncasat" : "evenimente neîncasate"}`, "", "var(--ev)"]);
   if (subsDue.length) todo.push(["ev", `${subsDue.length} ${subsDue.length === 1 ? "subcontractor neplătit" : "subcontractori neplătiți"}`, lei(subsDue.reduce((s, x) => s + +x.amount, 0), false), "var(--bad)"]);
-  if (fixedUn.length) todo.push(["bani", `${fixedUn.length} ${fixedUn.length === 1 ? "plată fixă nebifată" : "plăți fixe nebifate"}`, "", "var(--exp)"]);
+  if (fixedUn.length) todo.push(["bani", `${fixedUn.length} ${fixedUn.length === 1 ? "plată fixă nebifată" : "plăți fixe și rate nebifate"}`, "", "var(--exp)"]);
 
   // meter: 0..15000 lei/lună, prag 10000
   const N = 40, max = 15000, lit = Math.round(Math.min(max, Math.max(0, c.avg)) / max * N), zeroAt = Math.round(c.target / max * N);
@@ -248,7 +256,7 @@ VIEWS.acasa = () => {
   <section class="panel"><h2>De făcut</h2>${todo.map(([v, x, val, col]) => `<div class="todo" style="--c:${col}" onclick="go('${v}')"><span class="dot"></span><span class="x">${esc(x)}</span><span class="v">${val}</span></div>`).join("") || `<div class="empty">Totul e la zi.</div>`}</section>
   <section class="panel"><div class="bar"><h2 style="margin:0">Venituri ${y}</h2><span class="sp"></span><span class="sub num" style="font-size:17px">${k0(yearSeries(y).reduce((s, x) => s + x.tot, 0))} lei</span></div>${chart(y)}</section>
   <section class="panel"><div class="bar"><h2 style="margin:0">Luna asta</h2><span class="sp"></span><span class="num ${ms.net < 0 ? "bad" : ""}" style="font-size:22px;font-weight:700">${k0(ms.net)} lei</span></div>
-    <div class="sub">intră ${k0(ms.inc)} · ies ${k0(ms.out)} (fixe ${k0(ms.fixed)}, subcontractori ${k0(ms.subs)}, alte ${k0(ms.extra)})</div></section>`;
+    <div class="sub">intră ${k0(ms.inc)} · ies ${k0(ms.out)} (fixe ${k0(ms.fixed)}, rate ${k0(ms.rate)}, subcontractori ${k0(ms.subs)}, alte ${k0(ms.extra)})</div></section>`;
 };
 function chart(y) {
   const s = yearSeries(y), W = 340, H = 150, pb = 18, bw = 18, gap = (W - 12 * bw) / 12, max = Math.max(...s.map(x => x.tot), 1);
@@ -496,15 +504,17 @@ window.riderPdf = async btn => {
 /* ---------- BANI: luna / profit / setări ---------- */
 VIEWS.bani = () => `<div class="seg">${[["luna", "Luna"], ["profit", "Profit & taxe"], ["setari", "Setări"]].map(([v, l]) => `<button class="${S.baniTab === v ? "on" : ""}" onclick="S.baniTab='${v}';render()">${l}</button>`).join("")}</div>` + ({ luna: baniLuna, profit: baniProfit, setari: baniSetari }[S.baniTab])();
 const CATS = ["Casă", "Combustibil", "Mașină", "Echipament", "Materiale", "Mâncare", "Reverb", "Altele"];
-const CATCOL = { "Fixe": "var(--ink)", "Subcontractori": "var(--exp)", "Casă": "#9B8CFF", "Combustibil": "#FF6B9A", "Mașină": "#6AA8FF", "Echipament": "#49D3C1", "Materiale": "#C9A26B", "Mâncare": "#8FD14F", "Reverb": "#F27BD0", "Altele": "var(--faint)" };
+const CATCOL = { "Fixe": "var(--ink)", "Rate": "#FF9F43", "Subcontractori": "var(--exp)", "Casă": "#9B8CFF", "Combustibil": "#FF6B9A", "Mașină": "#6AA8FF", "Echipament": "#49D3C1", "Materiale": "#C9A26B", "Mâncare": "#8FD14F", "Reverb": "#F27BD0", "Altele": "var(--faint)" };
 function baniLuna() {
-  const m = S.month, ed = expDoc(m), s = monthSum(m), groups = { Fixe: s.fixed, Subcontractori: s.subs };
+  const m = S.month, ed = expDoc(m), s = monthSum(m), groups = { Fixe: s.fixed, Rate: s.rate, Subcontractori: s.subs };
   (ed.extra || []).filter(x => !x.ii).forEach(x => groups[x.cat || "Altele"] = (groups[x.cat || "Altele"] || 0) + (+x.amount || 0));
   const tot = Object.values(groups).reduce((a, b) => a + b, 0) || 1; let acc = 0; const R = 50, C = 2 * Math.PI * R;
   const arcs = Object.entries(groups).filter(([, v]) => v > 0).map(([k, v]) => { const len = v / tot * C, o = `<circle r="${R}" cx="60" cy="60" fill="none" stroke="${CATCOL[k] || "var(--faint)"}" stroke-width="16" stroke-dasharray="${len} ${C - len}" stroke-dashoffset="${-acc}" transform="rotate(-90 60 60)"/>`; acc += len; return o; }).join("");
   return `<section class="panel"><div class="bar"><div><div class="sub">Ies în ${MONTHS[+m.slice(5) - 1]}</div><div class="num" style="font-size:34px;font-weight:700">${k0(s.out)} lei</div></div><span class="sp"></span><div style="text-align:right"><div class="sub">Rămâne</div><div class="num ${s.net < 0 ? "bad" : "ok"}" style="font-size:24px;font-weight:700">${k0(s.net)}</div></div></div>
     <div class="donut" style="margin-top:10px"><svg viewBox="0 0 120 120"><circle r="${R}" cx="60" cy="60" fill="none" stroke="var(--well)" stroke-width="16"/>${arcs}</svg><div class="lg">${Object.entries(groups).filter(([, v]) => v > 0).map(([k, v]) => `<div style="--c:${CATCOL[k] || "var(--faint)"}"><span><i></i>${k}</span><b class="num">${k0(v)}</b></div>`).join("") || `<div class="mute">Nimic încă.</div>`}</div></div></section>
   <section class="panel"><h2>Plăți fixe</h2>${(cfg().fixed || []).map(f => `<label class="check" style="border-top:1px solid var(--line);padding:10px 0"><input type="checkbox" ${(ed.paid || {})[f.id] ? "checked" : ""} onchange="fxPaid('${esc(f.id)}',this.checked)"><span class="box"></span><span style="flex:1">${esc(f.n)}</span><b class="num" style="font-size:18px">${k0(f.a)}</b></label>`).join("") || `<div class="empty">Adaugă plăți fixe din Setări.</div>`}</section>
+  ${(() => { const due = rateDue(m); if (!due.length) return ""; return `<section class="panel"><div class="bar" style="margin-bottom:4px"><h2 style="margin:0">Rate</h2><span class="sp"></span><span class="num" style="font-size:20px;font-weight:600">${fmt2(s.rate)}</span></div>
+    ${due.map(x => `<label class="check" style="border-top:1px solid var(--line);padding:10px 0"><input type="checkbox" ${(ed.paid || {})["r:" + x.id] ? "checked" : ""} onchange="fxPaid('r:${esc(x.id)}',this.checked)"><span class="box"></span><span style="flex:1">${esc(x.n)}<br><span class="small mute">scadență ${ro(x.date)}${rateSchedule((cfg().rate || []).find(p => p.id === x.id)).slice(-1)[0].date === x.date ? " · ultima rată" : ""}</span></span><b class="num" style="font-size:18px">${fmt2(x.a)}</b></label>`).join("")}</section>`; })()}
   <section class="panel"><div class="bar" style="margin-bottom:6px"><h2 style="margin:0">Alte cheltuieli</h2><span class="sp"></span><button class="btn sm p" onclick="openExp()">+ Adaugă</button></div>
     ${expRows((ed.extra || []).filter(x => !x.ii)) || `<div class="empty">Nimic luna asta.</div>`}</section>
   ${(ed.extra || []).some(x => x.ii) ? `<section class="panel"><div class="bar" style="margin-bottom:6px"><h2 style="margin:0">Cheltuieli firmă</h2><span class="sp"></span><span class="num" style="font-size:20px;font-weight:600">${k0((ed.extra || []).filter(x => x.ii).reduce((s, x) => s + (+x.amount || 0), 0))}</span></div>
@@ -544,6 +554,9 @@ function baniSetari() {
     ${kids.map(k => `<div class="row"><div class="l"><div class="t">${esc(k)}</div></div><input style="width:110px" type="number" inputmode="decimal" value="${(c.rates || {})[k] ?? ""}" placeholder="${c.defRate}" onchange="setRate(${esc(JSON.stringify(k))},this.value)"></div>`).join("")}
     ${(c.ignore || []).length ? `<div class="sub" style="margin-top:12px">Nu apar la ore</div>${c.ignore.map(x => `<div class="row"><div class="l"><div class="t">${esc(x)}</div></div><button class="btn sm" onclick="unignore(${esc(JSON.stringify(x))})">Arată din nou</button></div>`).join("")}` : ""}</section>
   <section class="panel"><h2>Plăți fixe</h2>${(c.fixed || []).map(f => `<div class="row"><input value="${esc(f.n)}" onchange="setFx('${esc(f.id)}','n',this.value)"><input style="width:110px" type="number" inputmode="decimal" value="${f.a}" onchange="setFx('${esc(f.id)}','a',+this.value)"><button class="btn sm ghost" onclick="delFx('${esc(f.id)}')">✕</button></div>`).join("")}<button class="btn sm" style="margin-top:8px" onclick="addFx()">+ Plată fixă</button></section>
+  <section class="panel"><h2>Rate</h2>${(c.rate || []).map(p => { const sc = rateSchedule(p), left = sc.reduce((s, x) => s + x.a, 0); return `<div class="row"><div class="l"><div class="t">${esc(p.n)}</div><div class="s">${fmt2(p.a)} / lună · ${sc.length} rate · ultima ${sc.length ? ro(sc[sc.length - 1].date) : "—"}</div></div><div class="v">${k0(left)}</div><button class="btn sm ghost" onclick="openRate('${esc(p.id)}')">Editează</button></div>`; }).join("") || `<div class="empty">Nicio rată.</div>`}
+    ${(c.rate || []).length ? `<div class="bar small" style="margin-top:6px"><span class="mute">Mai ai de plată</span><span class="sp"></span><b class="num" style="font-size:18px">${fmt2((c.rate || []).reduce((s, p) => s + (+p.rest || 0), 0))} lei</b></div>` : ""}
+    <button class="btn sm" style="margin-top:8px" onclick="openRate()">+ Rată</button></section>
   <section class="panel"><h2>Taxe</h2><div class="g2">${inp("priorBrut", "Venit II dinainte de aplicație", "number")}${inp("priorDed", "Cheltuieli cu acte dinainte", "number")}${inp("priorNoDoc", "Cheltuieli fără acte dinainte", "number")}${inp("salMin", "Salariu minim (plafoane)", "number")}</div></section>
   <section class="panel"><h2>Conexiune</h2><div class="sub">Datele stau în scriptul tău Google și se sincronizează pe toate dispozitivele.</div>
     <div class="bar" style="margin-top:10px"><button class="btn sm" onclick="pull();toast('Sincronizez…')">Sincronizează acum</button><button class="btn sm" onclick="copy(setupLink())">Copiază link de conectare</button><button class="btn sm ghost" onclick="exportJson()">Backup JSON</button></div></section>`;
@@ -554,6 +567,12 @@ window.unignore = x => { const c = cfg(); put("cfg/main", { ...c, ignore: (c.ign
 window.setFx = (id, k, v) => { const c = cfg(); put("cfg/main", { ...c, fixed: c.fixed.map(f => f.id === id ? { ...f, [k]: v } : f) }); };
 window.delFx = id => { const c = cfg(); put("cfg/main", { ...c, fixed: c.fixed.filter(f => f.id !== id) }); render(); };
 window.addFx = () => { const c = cfg(); put("cfg/main", { ...c, fixed: [...(c.fixed || []), { id: uid(), n: "Plată nouă", a: 0 }] }); render(); };
+window.openRate = id => { const p = (cfg().rate || []).find(x => x.id === id) || { id: uid(), n: "", a: "", next: today(), rest: "" };
+  sheet(id ? "Editează rata" : "Rată nouă", `<label class="field"><span>Ce</span><input id="rN" value="${esc(p.n)}" placeholder="ex. eMAG 557255957"></label>
+  <div class="g3"><label class="field"><span>Rată lunară</span><input id="rA" type="number" step="0.01" inputmode="decimal" value="${p.a}"></label><label class="field"><span>Următoarea scadență</span><input id="rD" type="date" value="${p.next}"></label><label class="field"><span>Mai ai de plată</span><input id="rR" type="number" step="0.01" inputmode="decimal" value="${p.rest}"></label></div>
+  <div class="bar">${id ? `<button class="btn ghost" onclick="delRate('${esc(p.id)}')">Șterge</button>` : ""}<span class="sp"></span><button class="btn p" onclick="saveRate('${esc(p.id)}')">Salvează</button></div>`); };
+window.saveRate = id => { const c = cfg(), p = { id, n: $("#rN").value.trim(), a: +$("#rA").value, next: $("#rD").value, rest: +$("#rR").value }; if (!p.n || !p.a || !p.next) { toast("Completează numele, rata și scadența"); return; } const list = (c.rate || []).filter(x => x.id !== id); list.push(p); put("cfg/main", { ...c, rate: list }); closeSheet(); render(); };
+window.delRate = id => { const c = cfg(); put("cfg/main", { ...c, rate: (c.rate || []).filter(x => x.id !== id) }); closeSheet(); render(); };
 window.setupLink = () => location.origin + location.pathname + "#setup=" + btoa(JSON.stringify(S.api));
 window.exportJson = () => { const blob = new Blob([JSON.stringify(S.docs, null, 1)], { type: "application/json" }); const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = "bani-backup-" + today() + ".json"; a.click(); };
 
