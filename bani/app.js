@@ -137,6 +137,8 @@ const miraLei = c => { const i = c.st === "facturat" && invs()[c.inv]; return +c
 const miraShort = t => t.replace(/^\(?[PC+ ]+\)\s*/i, "").replace(/^mira\s*,\s*/i, "").trim();
 function miraRec(c) { if (c.st === "facturat") { const i = invs()[c.inv]; return i ? (i.paidDate || i.date || c.date) : c.date; } return cfg().miraDeferTo || c.date; }
 const events = () => Object.entries(coll("ev")).map(([id, e]) => ({ id, ...e })).sort((a, b) => (a.date || "").localeCompare(b.date || ""));
+// evenimentele deja trecute în jurnalul de vânzări (venitul lor e în „venit dinainte”) nu se mai adună a doua oară
+const moneyEvents = () => events().filter(e => !e.jurnal);
 const subsTot = e => (e.subs || []).reduce((s, x) => s + (+x.amount || 0), 0);
 const subDoc = x => x.doc !== false;
 const expDoc = m => doc("exp/" + m, { paid: {}, extra: [] });
@@ -144,7 +146,7 @@ const expDoc = m => doc("exp/" + m, { paid: {}, extra: [] });
 function monthSum(m) {
   const ore = oreSum(m).total;
   const mira = concerts().filter(c => mkey(c.date) === m && c.st !== "exclus").reduce((s, c) => s + miraLei(c), 0);
-  const evs = events().filter(e => mkey(e.date || "") === m);
+  const evs = moneyEvents().filter(e => mkey(e.date || "") === m);
   const ev = evs.reduce((s, e) => s + (+e.amount || 0), 0), subs = evs.reduce((s, e) => s + subsTot(e), 0);
   const ed = expDoc(m), fixed = (cfg().fixed || []).reduce((s, f) => s + (+f.a || 0), 0), extra = (ed.extra || []).reduce((s, x) => s + (+x.amount || 0), 0);
   const inc = ore + mira + ev, out = fixed + extra + subs;
@@ -153,7 +155,7 @@ function monthSum(m) {
 function taxYear(y) {
   const ys = String(y), t = today(), c = cfg();
   const mira = concerts().filter(x => x.date <= t && x.st !== "exclus" && x.st !== "verifica" && miraRec(x).startsWith(ys) && miraRec(x) <= t).reduce((s, x) => s + miraLei(x), 0);
-  const evs = events().filter(e => (e.date || "").startsWith(ys) && (e.date || "") <= t);
+  const evs = moneyEvents().filter(e => (e.date || "").startsWith(ys) && (e.date || "") <= t);
   const ev = evs.reduce((s, e) => s + (+e.amount || 0), 0);
   const subs = evs.reduce((s, e) => s + (e.subs || []).filter(subDoc).reduce((a, x) => a + (+x.amount || 0), 0), 0);
   const subsNo = evs.reduce((s, e) => s + (e.subs || []).filter(x => !subDoc(x)).reduce((a, x) => a + (+x.amount || 0), 0), 0);
@@ -178,7 +180,7 @@ function yearSeries(y) {
   for (let i = 1; i <= 12; i++) {
     const m = y + "-" + pad(i), hm = h[m] || {};
     const mira = (hm.mira || 0) + concerts().filter(c => c.st !== "exclus" && c.st !== "verifica" && miraRec(c) <= today() && mkey(miraRec(c)) === m && true).reduce((s, c) => s + miraLei(c), 0);
-    const ev = (hm.alte || 0) + events().filter(e => mkey(e.date || "") === m && (e.date || "") <= today()).reduce((s, e) => s + (+e.amount || 0), 0);
+    const ev = (hm.alte || 0) + moneyEvents().filter(e => mkey(e.date || "") === m && (e.date || "") <= today()).reduce((s, e) => s + (+e.amount || 0), 0);
     const ore = oreSum(m).total;
     out.push({ m, mira, ev, ore, tot: mira + ev + ore });
   }
@@ -211,8 +213,8 @@ VIEWS.acasa = () => {
   const cs = concerts(), td = today();
   const toBill = cs.filter(x => x.date <= td && (x.st === "nefacturat" || x.st === "verifica"));
   const unpaid = Object.values(invs()).filter(i => !i.paid);
-  const subsDue = []; events().forEach(e => (e.subs || []).forEach(x => { if (!x.paid && +x.amount) subsDue.push(x); }));
-  const clientDue = events().filter(e => +e.amount && !e.clientPaid && (e.date || "") <= td);
+  const subsDue = []; moneyEvents().forEach(e => (e.subs || []).forEach(x => { if (!x.paid && +x.amount) subsDue.push(x); }));
+  const clientDue = moneyEvents().filter(e => +e.amount && !e.clientPaid && (e.date || "") <= td);
   const ed = expDoc(S.month), fixedUn = (cfg().fixed || []).filter(f => !(ed.paid || {})[f.id]);
   const todo = [];
   if (os.pend) todo.push(["ore", `${os.pend} ${os.pend === 1 ? "oră de confirmat" : "ore de confirmat"}`, "", "var(--ore)"]);
@@ -393,12 +395,13 @@ VIEWS.ev = () => {
   const td = today(), all = events(), up = all.filter(e => (e.date || "") >= td), past = all.filter(e => (e.date || "") < td).reverse();
   const card = e => { const s = subsTot(e), a = +e.amount || 0, un = (e.subs || []).filter(x => !x.paid && +x.amount).length, keep = a - s;
     return `<div class="evc" onclick="openEvent('${esc(e.id)}')"><div class="bar"><div style="min-width:0;flex:1"><h3>${esc(e.name || "Fără nume")}</h3><div class="sub">${e.date ? dayName(e.date) + " " + ro(e.date) : "fără dată"} · ${esc(e.type || "")}${e.client ? " · " + esc(e.client) : ""}</div></div>
-    <div style="text-align:right"><div class="num" style="font-size:22px;font-weight:700">${k0(a)}</div>${!e.clientPaid && a ? `<span class="chip warn">neîncasat</span>` : ""}</div></div>
+    <div style="text-align:right"><div class="num" style="font-size:22px;font-weight:700">${a ? k0(a) : e.eur ? e.eur + " €" : "—"}</div>${e.jurnal ? `<span class="chip">în jurnal</span>` : !e.clientPaid && a ? `<span class="chip warn">neîncasat</span>` : ""}</div></div>
     ${a ? `<div class="split"><i style="width:${Math.max(0, keep) / a * 100}%;background:var(--ok)"></i><i style="width:${Math.min(s, a) / a * 100}%;background:var(--exp)"></i></div>
     <div class="bar small"><span class="ok">rămâne ${k0(keep)}</span><span class="sp"></span><span class="${un ? "bad" : "mute"}">subcontractori ${k0(s)}${un ? ` · ${un} neplătiți` : ""}</span></div>` : ""}</div>`; };
   return `<div class="bar" style="margin:2px 2px 12px"><h2 style="margin:0">Evenimente</h2><span class="sp"></span><button class="btn p sm" onclick="newEvent()">+ Eveniment</button></div>
   <div class="sub" style="margin:0 2px 8px">Urmează</div>${up.map(card).join("") || `<div class="panel"><div class="empty">Niciun eveniment viitor. Adaugă sonorizări, închirieri sau proiecte.</div></div>`}
-  <div class="sub" style="margin:16px 2px 8px">Trecute</div>${past.map(card).join("") || `<div class="empty">—</div>`}`;
+  ${past.length ? past.map((e, i) => (i === 0 || mkey(e.date || "") !== mkey(past[i - 1].date || "") ? `<div class="sub" style="margin:16px 2px 8px">${e.date ? MONTHS[+e.date.slice(5, 7) - 1] + " " + e.date.slice(0, 4) : "Fără dată"}</div>` : "") + card(e)).join("") : `<div class="empty">—</div>`}
+  <div class="small mute" style="margin:10px 2px">„În jurnal” = facturat înainte de aplicație; suma e deja la venitul dinainte și nu se mai adună o dată.</div>`;
 };
 let EV = null, EVID = null;
 window.newEvent = () => { EVID = uid(); EV = { name: "", date: today(), type: "Sonorizare", client: "", amount: 0, clientPaid: false, notes: "", subs: [], rider: null }; evSheet(true); };
@@ -410,10 +413,11 @@ function evSheet(isNew) {
   sheet(isNew ? "Eveniment nou" : e.name || "Eveniment", `
   <label class="field"><span>Nume</span><input value="${esc(e.name)}" oninput="EVset('name',this.value)" placeholder="ex. Nuntă Alba Iulia"></label>
   <div class="g2"><label class="field"><span>Data</span><input type="date" value="${esc(e.date)}" onchange="EVset('date',this.value,1)"></label>
-  <label class="field"><span>Tip</span><select onchange="EVset('type',this.value,1)">${["Sonorizare", "Închiriere", "Proiect", "Ecran LED", "Injectări", "Altele"].map(t => `<option ${e.type === t ? "selected" : ""}>${t}</option>`).join("")}</select></label>
+  <label class="field"><span>Tip</span><select onchange="EVset('type',this.value,1)">${["Sonorizare", "Închiriere", "Scenă", "Proiect", "Ecran LED", "Concert", "Injectări", "Altele"].map(t => `<option ${e.type === t ? "selected" : ""}>${t}</option>`).join("")}</select></label>
   <label class="field"><span>Client</span><input value="${esc(e.client)}" oninput="EVset('client',this.value)"></label>
   <label class="field"><span>Sumă de la client (lei)</span><input type="number" inputmode="decimal" value="${e.amount || ""}" onchange="EVset('amount',+this.value,1,1)"></label></div>
   <label class="check"><input type="checkbox" ${e.clientPaid ? "checked" : ""} onchange="EVset('clientPaid',this.checked,1)"><span class="box"></span>Clientul a plătit</label>
+  <label class="check"><input type="checkbox" ${e.jurnal ? "checked" : ""} onchange="EVset('jurnal',this.checked,1)"><span class="box"></span>Deja în jurnalul de vânzări (nu-l mai aduna la venit)</label>
   <label class="field" style="margin-top:6px"><span>Note</span><textarea oninput="EVset('notes',this.value)">${esc(e.notes)}</textarea></label>
   <section class="panel" style="margin-top:6px"><div class="bar"><span>Încasat</span><span class="sp"></span><b class="num" style="font-size:19px">${k0(e.amount)}</b></div><div class="bar"><span>Subcontractori</span><span class="sp"></span><b class="num" style="font-size:19px">−${k0(s)}</b></div><div class="bar" style="border-top:1px solid var(--line);margin-top:6px;padding-top:6px"><b>Îți rămâne</b><span class="sp"></span><b class="num ${keep < 0 ? "bad" : "ok"}" style="font-size:24px">${k0(keep)} lei</b></div></section>
   <div class="bar" style="margin:16px 0 6px"><h3>Subcontractori</h3><span class="sp"></span><button class="btn sm" onclick="subAdd()">+ Adaugă</button></div>
