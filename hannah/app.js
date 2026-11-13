@@ -311,14 +311,14 @@ window.openAdvance = n => {
   const hist = n ? payList().filter(p => p.name === n).sort((a, b) => b.date.localeCompare(a.date)) : [];
   const r = n ? rateOf(n) : cfg().defRate;
   sheet(n ? n : "Avans nou", `
-  ${n ? "" : `<label class="field"><span>Copil</span><input id="avN" list="kidsDL2" placeholder="Nume"></label><datalist id="kidsDL2">${knownKids().map(k => `<option value="${esc(k)}">`).join("")}</datalist>`}
+  ${n ? "" : `<label class="field"><span>Copil</span><select id="avN" onchange="const o=this.value==='__alt';$('#avX').style.display=o?'block':'none';if(!o){const r=rateOf(this.value);$('#avA').dataset.r=r;$('#avA').value=(+$('#avC').value||0)*r}"><option value="">Alege copilul…</option>${knownKids().map(k => `<option value="${esc(k)}">${esc(k)}</option>`).join("")}<option value="__alt">Altul (scriu numele)</option></select></label><input id="avX" placeholder="Nume" style="display:none;width:100%;padding:12px 14px;border-radius:16px;border:1.5px solid var(--line2);margin:-4px 0 12px;font-size:16px">`}
   <div class="g2"><label class="field"><span>Câte ore a plătit</span><input id="avC" type="number" inputmode="numeric" value="4" oninput="$('#avA').value=(+this.value||0)*(+$('#avA').dataset.r)"></label><label class="field"><span>Sumă (lei)</span><input id="avA" type="number" inputmode="decimal" value="${4 * r}" data-r="${r}"></label></div>
   <label class="field"><span>Data plății</span><input id="avD" type="date" value="${today()}"></label>
   <button class="btn p full" onclick="saveAdvance(${n ? `'${esc(n)}'` : "null"})">Bifează plata în avans</button>
   ${hist.length ? `<h3 style="margin:20px 0 6px">Plăți</h3>${hist.map(p => `<div class="row"><div class="l"><div class="t">${roShort(p.date)} · ${p.n} ore</div></div><div class="v">${k0(p.amount)}</div><button class="btn sm ghost" onclick="delAdvance('${esc(p.id)}','${esc(n)}')">✕</button></div>`).join("")}` : ""}`);
 };
 window.saveAdvance = n => {
-  const name = n || normName($("#avN").value), c = +$("#avC").value, a = +$("#avA").value, d = $("#avD").value;
+  const name = n || normName($("#avN").value === "__alt" ? $("#avX").value : $("#avN").value), c = +$("#avC").value, a = +$("#avA").value, d = $("#avD").value;
   if (!name || !c || !d) { toast("Completează copilul, orele și data"); return; }
   const D = clone(doc("pay/main", { list: [] })); D.list = D.list || []; D.list.push({ id: uid(), name, n: c, amount: a, date: d });
   put("pay/main", D); closeSheet(); toast(`Avans bifat: ${name}, ${c} ore`);
