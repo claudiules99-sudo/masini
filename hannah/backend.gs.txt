@@ -121,6 +121,8 @@ function doGet(e) {
     if (p.a === 'all') return json_({ docs: readAll_(), at: Date.now() });
     if (p.a === 'cal') return json_({ events: oreEvents_(p.from, p.to) });
     if (p.a === 'ping') return json_({ ok: true });
+    if (p.a === 'vapid') return json_({ key: vapidKeys_().pub });
+    if (p.a === 'pending') return json_(pendingToday_());
     return json_({ error: 'unknown action' });
   } catch (err) { return json_({ error: String(err) }); }
 }
@@ -131,6 +133,7 @@ function doPost(e) {
   try {
     if (b.a === 'set') { writeDoc_(b.p, b.d); return json_({ ok: true }); }
     if (b.a === 'del') { deleteDoc_(b.p); return json_({ ok: true }); }
+    if (b.a === 'sub') return json_({ ok: true, n: addSub_(b.sub) });
     if (b.a === 'bulk') { (b.ops || []).forEach(function (o) { if (o.d === null) deleteDoc_(o.p); else writeDoc_(o.p, o.d); }); return json_({ ok: true }); }
     return json_({ error: 'unknown action' });
   } catch (err) { return json_({ error: String(err) }); }
@@ -159,3 +162,115 @@ function setup() {
   if (!prop_('TOKEN')) PropertiesService.getScriptProperties().setProperty('TOKEN', Utilities.getUuid().replace(/-/g, ''));
   Logger.log('TOKEN: ' + prop_('TOKEN'));
 }
+
+/* ---------- notificări (Web Push, VAPID ES256, fără payload) ---------- */
+// Curba P-256 implementată cu BigInt (Apps Script nu are ECDSA nativ).
+var EC = (function () {
+  var P = BigInt('0xffffffff00000001000000000000000000000000ffffffffffffffffffffffff');
+  var N = BigInt('0xffffffff00000000ffffffffffffffffbce6faada7179e84f3b9cac2fc632551');
+  var A = P - BigInt(3);
+  var G = [BigInt('0x6b17d1f2e12c4247f8bce6e563a440f277037d812deb33a0f4a13945d898c296'), BigInt('0x4fe342e2fe1a7f9b8ee7eb4a7c0f9e162bce33576b315ececbb6406837bf51f5')];
+  var Z = BigInt(0), ONE = BigInt(1), TWO = BigInt(2), THREE = BigInt(3);
+  function mod(a, m) { var r = a % m; return r < Z ? r + m : r; }
+  function inv(a, m) { var lm = ONE, hm = Z, low = mod(a, m), high = m; while (low > ONE) { var r = high / low; var nm = hm - lm * r, nw = high - low * r; hm = lm; high = low; lm = nm; low = nw; } return mod(lm, m); }
+  // coordonate Jacobiene
+  function dbl(p) { if (!p || p[1] === Z) return null; var X = p[0], Y = p[1], Zz = p[2];
+    var YY = mod(Y * Y, P), S = mod(BigInt(4) * X * YY, P), ZZ = mod(Zz * Zz, P), M = mod(THREE * X * X + A * ZZ * ZZ, P);
+    var X3 = mod(M * M - TWO * S, P), Y3 = mod(M * (S - X3) - BigInt(8) * YY * YY, P), Z3 = mod(TWO * Y * Zz, P); return [X3, Y3, Z3]; }
+  function add(p, q) { if (!p) return q; if (!q) return p;
+    var Z1Z1 = mod(p[2] * p[2], P), Z2Z2 = mod(q[2] * q[2], P), U1 = mod(p[0] * Z2Z2, P), U2 = mod(q[0] * Z1Z1, P);
+    var S1 = mod(p[1] * q[2] * Z2Z2, P), S2 = mod(q[1] * p[2] * Z1Z1, P);
+    if (U1 === U2) return S1 === S2 ? dbl(p) : null;
+    var H = mod(U2 - U1, P), R = mod(S2 - S1, P), HH = mod(H * H, P), HHH = mod(H * HH, P), V = mod(U1 * HH, P);
+    var X3 = mod(R * R - HHH - TWO * V, P), Y3 = mod(R * (V - X3) - S1 * HHH, P), Z3 = mod(p[2] * q[2] * H, P); return [X3, Y3, Z3]; }
+  function mul(k, pt) { var r = null, q = [pt[0], pt[1], ONE]; while (k > Z) { if (k & ONE) r = add(r, q); q = dbl(q); k >>= ONE; } return r; }
+  function affine(p) { var zi = inv(p[2], P), zi2 = mod(zi * zi, P); return [mod(p[0] * zi2, P), mod(p[1] * zi2 * zi, P)]; }
+  function toInt(bytes) { var h = '0x'; for (var i = 0; i < bytes.length; i++) h += ('0' + (bytes[i] & 255).toString(16)).slice(-2); return BigInt(h); }
+  function toBytes(x, len) { var h = x.toString(16); while (h.length < len * 2) h = '0' + h; var out = []; for (var i = 0; i < len; i++) out.push(parseInt(h.substr(i * 2, 2), 16)); return out; }
+  return {
+    N: N,
+    pub: function (d) { var Q = affine(mul(d, G)); return [4].concat(toBytes(Q[0], 32), toBytes(Q[1], 32)); },
+    // hash = 32 octeți; kFor(counter) -> 32 octeți (determinist, derivat din cheie+mesaj)
+    sign: function (hash, d, kFor) {
+      var z = toInt(hash);
+      for (var c = 0; c < 50; c++) {
+        var k = mod(toInt(kFor(c)), N - ONE) + ONE;
+        var R = affine(mul(k, G)), r = mod(R[0], N); if (r === Z) continue;
+        var s = mod(inv(k, N) * (z + r * d), N); if (s === Z) continue;
+        return toBytes(r, 32).concat(toBytes(s, 32));
+      }
+      throw new Error('sign failed');
+    },
+    toInt: toInt, toBytes: toBytes
+  };
+})();
+
+function s8_(a) { return a.map(function (b) { b = b & 255; return b > 127 ? b - 256 : b; }); }
+function b64u_(bytes) { return Utilities.base64EncodeWebSafe(s8_(bytes)).replace(/=+$/, ''); }
+function b64uStr_(s) { return Utilities.base64EncodeWebSafe(s, Utilities.Charset.UTF_8).replace(/=+$/, ''); }
+function fromB64u_(s) { return Utilities.base64DecodeWebSafe(s + '==='.slice((s.length + 3) % 4)); }
+function u8_(a) { return a.map(function (b) { return b & 255; }); }
+
+function vapidKeys_() {
+  var sp = PropertiesService.getScriptProperties();
+  var d = sp.getProperty('VAPID_D'), pub = sp.getProperty('VAPID_PUB');
+  if (d && pub) return { d: EC.toInt(u8_(fromB64u_(d))), pub: pub };
+  var seed = []; for (var i = 0; i < 4; i++) seed = seed.concat(Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, Utilities.getUuid() + Date.now() + Math.random()));
+  var dn = EC.toInt(u8_(Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, s8_(seed)))) % (EC.N - BigInt(1)) + BigInt(1);
+  var dB = EC.toBytes(dn, 32), pB = EC.pub(dn);
+  sp.setProperty('VAPID_D', b64u_(dB)); sp.setProperty('VAPID_PUB', b64u_(pB));
+  return { d: dn, pub: b64u_(pB) };
+}
+function vapidJwt_(aud) {
+  var keys = vapidKeys_();
+  var head = b64uStr_(JSON.stringify({ typ: 'JWT', alg: 'ES256' }));
+  var body = b64uStr_(JSON.stringify({ aud: aud, exp: Math.floor(Date.now() / 1000) + 12 * 3600, sub: 'https://claudiules99-sudo.github.io/masini/hannah/' }));
+  var input = head + '.' + body;
+  var hash = u8_(Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, input, Utilities.Charset.UTF_8));
+  var dB = EC.toBytes(keys.d, 32);
+  var sig = EC.sign(hash, keys.d, function (c) { return u8_(Utilities.computeHmacSha256Signature(s8_(hash.concat([c])), s8_(dB))); });
+  return { jwt: input + '.' + b64u_(sig), pub: keys.pub };
+}
+function subs_() { try { return JSON.parse(prop_('PUSH_SUBS') || '[]'); } catch (e) { return []; } }
+function saveSubs_(l) { PropertiesService.getScriptProperties().setProperty('PUSH_SUBS', JSON.stringify(l)); }
+function addSub_(sub) { if (!sub || !sub.endpoint) throw new Error('bad sub'); var l = subs_().filter(function (s) { return s.endpoint !== sub.endpoint; }); l.push({ endpoint: sub.endpoint, at: Date.now() }); saveSubs_(l); return l.length; }
+function sendPushAll_() {
+  var l = subs_(), keep = [], res = [];
+  l.forEach(function (s) {
+    var m = s.endpoint.match(/^https:\/\/[^/]+/); var v = vapidJwt_(m[0]);
+    var r = UrlFetchApp.fetch(s.endpoint, { method: 'post', muteHttpExceptions: true, payload: '', headers: { TTL: '7200', Urgency: 'high', Authorization: 'vapid t=' + v.jwt + ', k=' + v.pub } });
+    var code = r.getResponseCode(); res.push(code + ' ' + r.getContentText().slice(0, 120));
+    if (code !== 404 && code !== 410) keep.push(s);
+  });
+  if (keep.length !== l.length) saveSubs_(keep);
+  return res;
+}
+
+/* ore neconfirmate azi (pentru notificare) */
+function splitKids_(s) { return String(s).trim().replace(/\s+/g, ' ').split(/\s+(?:si|și|\+|&)\s+/i); }
+function pendingToday_() {
+  var now = new Date(), today = Utilities.formatDate(now, TZ, 'yyyy-MM-dd'), tom = Utilities.formatDate(new Date(now.getTime() + 864e5), TZ, 'yyyy-MM-dd');
+  var docs = readAll_(), cfg = docs['cfg/main'] || {}, ignore = cfg.ignore || [];
+  var od = docs['ore/' + today.slice(0, 7)] || { d: {} }, done = (od.d || {})[today] || {};
+  var kids = [];
+  oreEvents_(today, tom).forEach(function (e) {
+    if (ignore.indexOf(e.summary.trim().replace(/\s+/g, ' ')) >= 0) return;
+    splitKids_(e.summary).forEach(function (k) { if (!done[k] && kids.indexOf(k) < 0) kids.push(k); });
+  });
+  return { date: today, kids: kids };
+}
+/** Rulează zilnic la ~19:50: dacă azi sunt ore neconfirmate, trimite notificarea. */
+function notifyLessons() {
+  var p = pendingToday_();
+  if (!p.kids.length) return;
+  Logger.log(sendPushAll_().join(' | '));
+}
+/** Rulează o dată din editor: cheile VAPID + verificarea zilnică la 19:50. */
+function setupPush() {
+  vapidKeys_();
+  ScriptApp.getProjectTriggers().forEach(function (t) { if (t.getHandlerFunction() === 'notifyLessons') ScriptApp.deleteTrigger(t); });
+  ScriptApp.newTrigger('notifyLessons').timeBased().everyDays(1).atHour(19).nearMinute(50).inTimezone(TZ).create();
+  Logger.log('VAPID_PUB: ' + prop_('VAPID_PUB') + ' | abonați: ' + subs_().length);
+}
+/** Test manual: trimite acum o notificare la toate telefoanele abonate. */
+function testPush() { Logger.log(sendPushAll_().join(' | ')); }

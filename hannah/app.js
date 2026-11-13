@@ -242,7 +242,7 @@ VIEWS.ore = () => {
   const dayCell = d => { const ls = lessons(mkey(d)).filter(l => l.date === d); return `<button class="dc ${d === S.day ? "on" : ""} ${d === td ? "td" : ""}" onclick="pickDay('${d}')"><div class="w">${DSHORT[parseD(d).getDay()]}</div><div class="d">${+d.slice(8)}</div><div class="p">${ls.slice(0, 4).map(l => { const s = lstate(l).s; return `<i class="${s === 1 ? "y" : s === 0 ? "n" : ""}"></i>`; }).join("")}</div></button>`; };
   const ls = lessons(m).filter(l => l.date === S.day), dayTot = ls.reduce((s, l) => s + (lstate(l).s === 1 ? +lstate(l).r : 0), 0);
   const anyPend = ls.some(l => lstate(l).s == null);
-  return `
+  return `${pushCard()}
   <section class="card hero sage"><div class="blob"></div><div class="k">Ore în ${MONTHS[+m.slice(5, 7) - 1]}</div>
     <div class="big num">${k0(o.total)}<small>lei</small></div>
     <div class="cap">${pl(o.came,"oră ținută","ore ținute")} · ${pl(o.abs,"absență","absențe")}${o.pend ? ` · <b>${o.pend} de confirmat</b>` : ""}</div>
@@ -455,6 +455,8 @@ window.openSettings = () => {
   <div class="g2"><label class="field"><span>Tarif pe oră (lei)</span><input id="sR" type="number" inputmode="decimal" value="${c.defRate}"></label><label class="field"><span>Data estimată a nașterii</span><input id="sD" type="date" value="${c.due}"></label></div>
   <button class="btn p full" onclick="saveSettings()">Salvează</button>
   ${(c.ignore || []).length ? `<h3 style="margin:22px 0 6px">Ascunse din calendar</h3>${c.ignore.map(r => `<div class="row"><div class="l"><div class="t">${esc(r)}</div></div><button class="btn sm" onclick="unignore('${esc(r)}')">Arată din nou</button></div>`).join("")}` : ""}
+  <h3 style="margin:22px 0 6px">Amintire seara</h3>
+  <div class="bar"><span class="small mute" style="flex:1">${pushState() === "on" ? "Pornită ✓ — vine pe la 19:50, doar dacă ai ore neconfirmate." : pushState() === "denied" ? "Oprită din setările iPhone-ului." : "Notificare seara dacă ai ore neconfirmate."}</span><button class="btn sm" onclick="enablePush()">${pushState() === "on" ? "Reconectează" : "Pornește"}</button></div>
   <h3 style="margin:22px 0 6px">Telefonul tău</h3>
   <div class="bar"><button class="btn sm" onclick="pull();toast('Sincronizez…')">Sincronizează acum</button><button class="btn sm" onclick="copy(setupLink())">Copiază linkul de conectare</button><button class="btn sm ghost" onclick="exportJson()">Backup</button></div>
   <p class="small mute">Punct verde lângă H = totul e salvat. Galben = se trimite. Roșu = fără net; se trimite singur când revine.</p>`);
@@ -463,6 +465,32 @@ window.saveSettings = () => { put("cfg/main", { ...cfg(), defRate: +$("#sR").val
 window.unignore = r => { const c = cfg(); put("cfg/main", { ...c, ignore: (c.ignore || []).filter(x => x !== r) }); openSettings(); render(); };
 window.setupLink = () => location.origin + location.pathname + "#setup=" + btoa(JSON.stringify(S.api));
 window.exportJson = () => { const blob = new Blob([JSON.stringify(S.docs, null, 1)], { type: "application/json" }); const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = "hannah-backup-" + today() + ".json"; a.click(); };
+
+/* ---------- notificări ---------- */
+const pushOK = () => "serviceWorker" in navigator && "PushManager" in window && "Notification" in window;
+const standalone = () => matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;
+function shareApi() { if (!S.api || !("caches" in window)) return; caches.open("hannah-api").then(c => c.put(new URL("__api", location.href).href, new Response(JSON.stringify(S.api)))).catch(() => {}); }
+const pushState = () => !pushOK() ? "no" : Notification.permission === "granted" && LS.get("h.push", false) ? "on" : Notification.permission === "denied" ? "denied" : "off";
+function b64uToU8(s) { const b = atob(s.replace(/-/g, "+").replace(/_/g, "/") + "===".slice((s.length + 3) % 4)); return Uint8Array.from(b, c => c.charCodeAt(0)); }
+window.enablePush = async () => {
+  if (!pushOK()) { toast(standalone() ? "Telefonul nu suportă notificări (trebuie iOS 16.4+)" : "Deschide aplicația de pe ecranul principal, nu din Safari"); return; }
+  try {
+    const perm = await Notification.requestPermission();
+    if (perm !== "granted") { toast("Notificările au fost refuzate. Se pot porni din Setări → Notificări → Hannah"); render(); return; }
+    shareApi();
+    const reg = await navigator.serviceWorker.ready;
+    const k = await get({ a: "vapid" }); if (!k.key) throw new Error(k.error || "fără cheie");
+    let sub = await reg.pushManager.getSubscription();
+    if (!sub) sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64uToU8(k.key) });
+    const r = await post({ a: "sub", sub: sub.toJSON() }); if (!r.ok) throw new Error(r.error || "server");
+    LS.set("h.push", true); toast("Gata 🔔 Primești notificare seara, doar în zilele cu ore neconfirmate"); render();
+  } catch (e) { toast("Nu am putut porni notificările: " + (e.message || e)); }
+};
+function pushCard() {
+  const st = pushState(); if (st === "on" || LS.get("h.pushHide", false)) return "";
+  if (!standalone()) return "";
+  return `<section class="card" style="display:flex;gap:12px;align-items:center"><div style="font-size:28px">🔔</div><div style="flex:1"><b>Amintire seara</b><div class="small mute">${st === "denied" ? "Notificările sunt oprite. Pornește-le din Setări iPhone → Notificări → Hannah." : "Îți dau de știre seara dacă ai ore neconfirmate."}</div></div>${st === "off" ? `<button class="btn p sm" onclick="enablePush()">Pornește</button>` : ""}<button class="btn ghost sm" onclick="LS.set('h.pushHide',true);render()" aria-label="Ascunde">✕</button></section>`;
+}
 
 /* ---------- setup ---------- */
 function setupView() {
@@ -484,14 +512,14 @@ function sheet(title, body) {
 }
 window.closeSheet = () => { $("#sheet").classList.remove("on"); $("#scrim").classList.remove("on"); document.body.style.overflow = ""; render(); };
 $("#scrim").onclick = closeSheet;
-Object.assign(window, { go, copy, toast, pull, $, S, render });
+Object.assign(window, { go, copy, toast, pull, $, S, render, LS });
 
 /* ---------- pornire ---------- */
 (function boot() {
   if (/setup=/.test(location.hash)) doSetup(location.hash);
   if (!VIEWS[S.view]) S.view = "acasa";
   render();
-  if (S.api) pull();
+  if (S.api) { pull(); shareApi(); }
   window.addEventListener("online", () => { S.online = true; flush(); });
   document.addEventListener("visibilitychange", () => { if (!document.hidden && S.api) pull(); });
   if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});
