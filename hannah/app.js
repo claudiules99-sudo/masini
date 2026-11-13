@@ -147,6 +147,16 @@ function oreSum(m) {
   return { total, came, pend, abs, planned };
 }
 
+/* ---------- avansuri (ore plătite înainte) ---------- */
+const payList = () => (doc("pay/main", { list: [] }).list || []);
+function prepaid(name) {
+  const ps = payList().filter(p => p.name === name); if (!ps.length) return null;
+  const from = ps.map(p => p.date).sort()[0], total = ps.reduce((t, p) => t + +p.n, 0), paid = ps.reduce((t, p) => t + +p.amount, 0);
+  let used = 0; Object.keys(S.docs).filter(k => k.startsWith("ore/")).forEach(k => Object.entries(S.docs[k].d || {}).forEach(([d, o]) => { if (d >= from && o[name] && o[name].s === 1) used++; }));
+  const last = ps.map(p => p.date).sort().pop();
+  return { total, used, left: total - used, paid, last, from };
+}
+
 /* ---------- bani pe lună ---------- */
 const txDoc = m => doc("tx/" + m, { list: [] });
 const fxPaid = m => doc("fxp/" + m, { p: {} });
@@ -255,7 +265,8 @@ VIEWS.ore = () => {
     ${ls.length ? ls.map(kidRow).join("") : `<div class="empty">Nicio oră în ziua asta.</div>`}
     <div class="bar" style="margin-top:12px">${anyPend && S.day <= td ? `<button class="btn p" onclick="allCame()">Toți au venit</button>` : ""}<span class="sp"></span><button class="btn sm" onclick="openAddLesson()">+ oră manuală</button></div>
   </section>
-  <section class="card"><div class="hd2"><h2>Pe copii, luna asta</h2></div>${perKid(m)}</section>`;
+  <section class="card"><div class="hd2"><h2>Pe copii, luna asta</h2></div>${perKid(m)}</section>
+  <section class="card"><div class="hd2"><h2>Avansuri</h2><button class="add" onclick="openAdvance()" aria-label="Adaugă avans">+</button></div>${advList()}</section>`;
 };
 function perKid(m) {
   const by = {}; lessons(m).forEach(l => { const st = lstate(l); const b = by[l.name] ||= { n: 0, s: 0, a: 0 }; if (st.s === 1) { b.n++; b.s += +st.r; } else if (st.s === 0) b.a++; });
@@ -267,7 +278,7 @@ function kidRow(l) {
   const st = lstate(l), cls = st.s === 1 ? "y" : st.s === 0 ? "n" : "";
   const key = esc(JSON.stringify({ d: l.date, n: l.name, src: l.src, id: l.id || "" }));
   const canHide = l.src === "cal" && st.s == null;
-  return `<div class="kid ${cls}" data-k="${key}"><div class="av">${st.s === 1 ? "✓" : esc(initials(l.name))}</div><div style="flex:1;min-width:0"><div class="nm">${esc(l.name)}</div><div class="tm">${l.time || ""}${l.time ? " · " : ""}${k0(st.r)} lei${l.src === "man" ? " · manuală" : ""}</div></div>
+  return `<div class="kid ${cls}" data-k="${key}"><div class="av">${st.s === 1 ? "✓" : esc(initials(l.name))}</div><div style="flex:1;min-width:0"><div class="nm">${esc(l.name)}</div><div class="tm">${l.time || ""}${l.time ? " · " : ""}${k0(st.r)} lei${l.src === "man" ? " · manuală" : ""}${(() => { const p = prepaid(l.name); return p ? ` · <span class="tag ${p.left > 0 ? "ok" : "warn"}">avans: ${p.left > 0 ? p.left + " rămase" : "terminat"}</span>` : ""; })()}</div></div>
     ${canHide ? `<button class="hide" title="Nu e oră" onclick="ignoreEv('${esc(l.raw)}')"><svg viewBox="0 0 24 24" style="width:18px;height:18px"><path d="M3 3l18 18M10.6 6.1A9.8 9.8 0 0112 6c5 0 9 6 9 6a17 17 0 01-3.2 3.8M6.3 7.3A17 17 0 003 12s4 6 9 6a9 9 0 004.3-1.1"/></svg></button>` : ""}
     <div class="yn"><button class="y ${st.s === 1 ? "on" : ""}" onclick="setKid(this,1)">A venit</button><button class="n ${st.s === 0 ? "on" : ""}" onclick="setKid(this,0)">Absent</button></div></div>`;
 }
@@ -291,8 +302,31 @@ window.openAddLesson = () => sheet("Oră manuală", `
   <div class="g2"><label class="field"><span>Data</span><input id="axD" type="date" value="${S.day}"></label><label class="field"><span>Sumă (lei)</span><input id="axR" type="number" inputmode="decimal" placeholder="${cfg().defRate}"></label></div>
   <button class="btn p full" onclick="addLesson()">Adaugă ora</button>`);
 window.addLesson = () => { const n = normName($("#axN").value), d = $("#axD").value, r = $("#axR").value; if (!n || !d) { toast("Pune numele și data"); return; } const m = mkey(d), od = clone(oreDoc(m)); od.x = od.x || []; od.x.push({ id: uid(), date: d, name: n }); od.d = od.d || {}; od.d[d] = od.d[d] || {}; od.d[d][n] = { s: 1, r: r !== "" ? +r : rateOf(n) }; put("ore/" + m, od); closeSheet(); S.day = d; render(); toast("Ora a fost adăugată"); };
+function advList() {
+  const names = [...new Set(payList().map(p => p.name))];
+  if (!names.length) return `<div class="empty">Când un părinte plătește mai multe ore înainte, apasă + și bifează aici.</div>`;
+  return names.map(n => { const p = prepaid(n); return `<div class="row tap" onclick="openAdvance('${esc(n)}')"><div class="ic" style="background:${p.left > 0 ? "var(--sage2)" : "var(--butter2)"}">${p.left > 0 ? "💳" : "⏳"}</div><div class="l"><div class="t">${esc(n)}</div><div class="s">ultimul avans ${roShort(p.last)} · ${p.used} din ${p.total} ore ținute</div></div><div class="v" style="font-size:15px">${p.left > 0 ? p.left + " rămase" : p.left === 0 ? "de reînnoit" : Math.abs(p.left) + " neplătite"}</div></div>`; }).join("");
+}
+window.openAdvance = n => {
+  const hist = n ? payList().filter(p => p.name === n).sort((a, b) => b.date.localeCompare(a.date)) : [];
+  const r = n ? rateOf(n) : cfg().defRate;
+  sheet(n ? n : "Avans nou", `
+  ${n ? "" : `<label class="field"><span>Copil</span><input id="avN" list="kidsDL2" placeholder="Nume"></label><datalist id="kidsDL2">${knownKids().map(k => `<option value="${esc(k)}">`).join("")}</datalist>`}
+  <div class="g2"><label class="field"><span>Câte ore a plătit</span><input id="avC" type="number" inputmode="numeric" value="4" oninput="$('#avA').value=(+this.value||0)*(+$('#avA').dataset.r)"></label><label class="field"><span>Sumă (lei)</span><input id="avA" type="number" inputmode="decimal" value="${4 * r}" data-r="${r}"></label></div>
+  <label class="field"><span>Data plății</span><input id="avD" type="date" value="${today()}"></label>
+  <button class="btn p full" onclick="saveAdvance(${n ? `'${esc(n)}'` : "null"})">Bifează plata în avans</button>
+  ${hist.length ? `<h3 style="margin:20px 0 6px">Plăți</h3>${hist.map(p => `<div class="row"><div class="l"><div class="t">${roShort(p.date)} · ${p.n} ore</div></div><div class="v">${k0(p.amount)}</div><button class="btn sm ghost" onclick="delAdvance('${esc(p.id)}','${esc(n)}')">✕</button></div>`).join("")}` : ""}`);
+};
+window.saveAdvance = n => {
+  const name = n || normName($("#avN").value), c = +$("#avC").value, a = +$("#avA").value, d = $("#avD").value;
+  if (!name || !c || !d) { toast("Completează copilul, orele și data"); return; }
+  const D = clone(doc("pay/main", { list: [] })); D.list = D.list || []; D.list.push({ id: uid(), name, n: c, amount: a, date: d });
+  put("pay/main", D); closeSheet(); toast(`Avans bifat: ${name}, ${c} ore`);
+};
+window.delAdvance = (id, n) => { if (!confirm("Ștergi plata asta?")) return; const D = clone(doc("pay/main", { list: [] })); D.list = (D.list || []).filter(p => p.id !== id); put("pay/main", D); openAdvance(n); render(); };
 window.openRate = n => sheet(n, `<label class="field"><span>Cât ia pe oră de la ${esc(n)} (lei)</span><input id="rtV" type="number" inputmode="decimal" value="${rateOf(n)}"></label>
-  <p class="sub" style="margin-top:0">Se aplică orelor noi. Cele deja confirmate rămân cu suma de atunci.</p><button class="btn p full" onclick="saveRateKid('${esc(n)}')">Salvează</button>`);
+  <p class="sub" style="margin-top:0">Se aplică orelor noi. Cele deja confirmate rămân cu suma de atunci.</p><button class="btn p full" onclick="saveRateKid('${esc(n)}')">Salvează</button>
+  <button class="btn full" style="margin-top:10px" onclick="openAdvance('${esc(n)}')">💳 A plătit în avans</button>`);
 window.saveRateKid = n => { const c = cfg(), v = +$("#rtV").value; c.rates = { ...(c.rates || {}) }; if (v === +c.defRate) delete c.rates[n]; else c.rates[n] = v; put("cfg/main", c); closeSheet(); toast("Salvat"); };
 
 /* ---------- CHELTUIELI ---------- */
