@@ -44,7 +44,7 @@ const catOf = c => CATS[c] || CATS["Altele"];
 
 /* ---------- stare ---------- */
 const DEF = {
-  defRate: 120, rates: {}, ignore: [], due: "2027-06-15",
+  defRate: 120, rates: {}, ignore: [], due: "2027-06-02",
   fixed: [
     { id: "fx1", n: "Chirie Reverb", a: 1000, cat: "Muncă", from: "2026-11" },
     { id: "fx2", n: "Abonament Regina Maria", a: 100, cat: "Sănătate", from: "2026-11" },
