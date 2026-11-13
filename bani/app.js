@@ -436,9 +436,18 @@ function evSheet(isNew) {
   ${e.subs.map(subCard).join("") || `<div class="empty">Niciunul.</div>`}
   <div class="bar" style="margin:18px 0 6px"><h3>Rider tehnic</h3><span class="sp"></span>${e.rider ? `<button class="btn sm" onclick="copy(riderText(EV))">Copiază</button><button class="btn sm p" onclick="riderPdf(this)">PDF</button>` : `<button class="btn sm" onclick="EV.rider=RIDER();EV.rider.venue=EV.name;evSheet()">+ Creează rider</button>`}</div>
   ${e.rider ? riderForm(e.rider) : ""}
-  <div class="bar" style="margin-top:18px"><button class="btn ghost" onclick="delEvent()">Șterge evenimentul</button><span class="sp"></span><button class="btn p" onclick="if(!EV.name){toast('Pune un nume');return}evSave(1);closeSheet();render();toast('Salvat')">Gata</button></div>`, true);
+  <div class="bar" style="margin-top:18px"><button class="btn ghost" onclick="delEvent()">Șterge evenimentul</button><span class="sp"></span>${cfg().notesOff ? "" : `<button class="btn sm" onclick="if(EV.name){EV.nt=1;evSave(1);toNotes(EV)}">${e.nt ? "Trimite din nou în Notes" : "Trimite în Notes"}</button>`}<button class="btn p" onclick="evDone()">Gata</button></div>
+  <div class="small mute" style="margin-top:8px">Evenimentul apare singur în calendarul Google „Evenimente”${cfg().notesOff ? "" : " și, la Gata, se adaugă în nota „" + esc(NOTE_NAME) + "”"}.</div>`, true);
 }
+const NOTE_NAME = "Evenimente 2026", SHORTCUT = "Bani Notes";
+const noteLine = e => { const [y, m, d] = (e.date || "").split("-"); const dt = e.date ? `${+d} ${MONTHS[+m - 1].slice(0, 3)}${y !== String(new Date().getFullYear()) ? " " + y : ""}` : "fără dată";
+  return [dt, e.name, e.client, +e.amount ? k0(e.amount) + " lei" : ""].filter(Boolean).join(" – "); };
+window.toNotes = e => { const u = "shortcuts://run-shortcut?name=" + encodeURIComponent(SHORTCUT) + "&input=text&text=" + encodeURIComponent(noteLine(e)); setTimeout(() => { location.href = u; }, 350); };
+window.evDone = () => { if (!EV.name) { toast("Pune un nume"); return; } const send = !EV.nt && !cfg().notesOff; if (send) EV.nt = 1; evSave(1); closeSheet(); render(); toast(send ? "Salvat · îl trimit în Notes" : "Salvat"); if (send) toNotes(EV); };
 window.EVset = (k, v, now, rerender) => { EV[k] = v; evSave(now); if (rerender) { const y = $("#sheet").scrollTop; evSheet(); $("#sheet").scrollTop = y; } };
+window.evSync = async b => { if (!S.api) return; b.disabled = true; b.textContent = "Se pun în calendar…";
+  try { const r = await fetch(S.api.u, { method: "POST", headers: { "Content-Type": "text/plain" }, body: JSON.stringify({ t: S.api.t, a: "evsync" }) }).then(r => r.json()); toast(r.ok ? r.n + " evenimente în calendar" : "Eroare: " + (r.error || "")); }
+  catch (e) { toast("Nu am putut ajunge la script"); } b.disabled = false; b.textContent = "Pune toate evenimentele în calendar"; };
 window.delEvent = () => { if (!confirmBox("Ștergi evenimentul?")) return; put("ev/" + EVID, null); closeSheet(); render(); };
 function confirmBox(msg) { try { return window.confirm(msg); } catch (e) { return true; } }
 function subCard(x, i) {
@@ -590,6 +599,9 @@ function baniSetari() {
     ${(c.rate || []).length ? `<div class="bar small" style="margin-top:6px"><span class="mute">Mai ai de plată</span><span class="sp"></span><b class="num" style="font-size:18px">${fmt2((c.rate || []).reduce((s, p) => s + (+p.rest || 0), 0))} lei</b></div>` : ""}
     <button class="btn sm" style="margin-top:8px" onclick="openRate()">+ Rată</button></section>
   <section class="panel"><h2>Taxe</h2><div class="g2">${inp("priorBrut", "Venit II dinainte de aplicație", "number")}${inp("priorDed", "Cheltuieli cu acte dinainte", "number")}${inp("priorNoDoc", "Cheltuieli fără acte dinainte", "number")}${inp("salMin", "Salariu minim (plafoane)", "number")}</div></section>
+  <section class="panel"><h2>Evenimente</h2><div class="sub">Fiecare eveniment ajunge singur în calendarul Google „Evenimente”. Pentru Notes, aplicația pornește scurtătura „${SHORTCUT}” de pe iPhone.</div>
+    <label class="check"><input type="checkbox" ${cfg().notesOff ? "" : "checked"} onchange="put('cfg/main',{...cfg(),notesOff:!this.checked});render()"><span class="box"></span>Adaugă evenimentele noi în nota „${NOTE_NAME}”</label>
+    <div class="bar" style="margin-top:8px"><button class="btn sm" onclick="evSync(this)">Pune toate evenimentele în calendar</button></div></section>
   <section class="panel"><h2>Conexiune</h2><div class="sub">Datele stau în scriptul tău Google și se sincronizează pe toate dispozitivele.</div>
     <div class="bar" style="margin-top:10px"><button class="btn sm" onclick="pull();toast('Sincronizez…')">Sincronizează acum</button><button class="btn sm" onclick="copy(setupLink())">Copiază link de conectare</button><button class="btn sm ghost" onclick="exportJson()">Backup JSON</button></div></section>`;
 }
