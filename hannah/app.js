@@ -476,7 +476,7 @@ window.enablePush = async () => {
   if (!pushOK()) { toast(standalone() ? "Telefonul nu suportă notificări (trebuie iOS 16.4+)" : "Deschide aplicația de pe ecranul principal, nu din Safari"); return; }
   try {
     const perm = await Notification.requestPermission();
-    if (perm !== "granted") { toast("Notificările au fost refuzate. Se pot porni din Setări → Notificări → Hannah"); render(); return; }
+    if (perm !== "granted") { toast("Notificările au fost refuzate. Se pot porni din Setări → Notificări → Banii mei"); render(); return; }
     shareApi();
     const reg = await navigator.serviceWorker.ready;
     const k = await get({ a: "vapid" }); if (!k.key) throw new Error(k.error || "fără cheie");
@@ -489,7 +489,7 @@ window.enablePush = async () => {
 function pushCard() {
   const st = pushState(); if (st === "on" || LS.get("h.pushHide", false)) return "";
   if (!standalone()) return "";
-  return `<section class="card" style="display:flex;gap:12px;align-items:center"><div style="font-size:28px">🔔</div><div style="flex:1"><b>Amintire seara</b><div class="small mute">${st === "denied" ? "Notificările sunt oprite. Pornește-le din Setări iPhone → Notificări → Hannah." : "Îți dau de știre seara dacă ai ore neconfirmate."}</div></div>${st === "off" ? `<button class="btn p sm" onclick="enablePush()">Pornește</button>` : ""}<button class="btn ghost sm" onclick="LS.set('h.pushHide',true);render()" aria-label="Ascunde">✕</button></section>`;
+  return `<section class="card" style="display:flex;gap:12px;align-items:center"><div style="font-size:28px">🔔</div><div style="flex:1"><b>Amintire seara</b><div class="small mute">${st === "denied" ? "Notificările sunt oprite. Pornește-le din Setări iPhone → Notificări → Banii mei." : "Îți dau de știre seara dacă ai ore neconfirmate."}</div></div>${st === "off" ? `<button class="btn p sm" onclick="enablePush()">Pornește</button>` : ""}<button class="btn ghost sm" onclick="LS.set('h.pushHide',true);render()" aria-label="Ascunde">✕</button></section>`;
 }
 
 /* ---------- setup ---------- */
