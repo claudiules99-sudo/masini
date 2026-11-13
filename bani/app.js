@@ -86,6 +86,8 @@ async function pull() {
     S.docs = r.docs || {};
     Object.entries(pend).forEach(([p, d]) => { if (d === null) delete S.docs[p]; else S.docs[p] = d; });
     LS.set("bani.docs", S.docs); S.online = true;
+    // eveniment deschis și nemodificat aici → ia varianta nouă de pe server (nu o suprascrie pe cea veche)
+    if (EV && EVID && S.docs["ev/" + EVID] && JSON.stringify(EV) === EVbase && !pend["ev/" + EVID]) { EV = clone(S.docs["ev/" + EVID]); EV.subs = EV.subs || []; EVbase = JSON.stringify(EV); if ($("#sheet").classList.contains("on")) evSheet(); }
   } catch (e) { S.online = false; }
   S.syncing = false; led(); render(); flush();
 }
@@ -416,10 +418,10 @@ VIEWS.ev = () => {
   <div class="small mute" style="margin:10px 2px">„În jurnal” = facturat înainte de aplicație; suma e deja la venitul dinainte și nu se mai adună o dată.</div>`;
 };
 let EV = null, EVID = null;
-window.newEvent = () => { EVID = uid(); EV = { name: "", date: today(), type: "Sonorizare", client: "", amount: 0, clientPaid: false, notes: "", subs: [], rider: null }; evSheet(true); };
-window.openEvent = id => { EVID = id; EV = clone(coll("ev")[id]); EV.subs = EV.subs || []; evSheet(false); };
+window.newEvent = () => { EVID = uid(); EVbase = ""; EV = { name: "", date: today(), type: "Sonorizare", client: "", amount: 0, clientPaid: false, notes: "", subs: [], rider: null }; evSheet(true); };
+window.openEvent = id => { EVID = id; EV = clone(coll("ev")[id]); EV.subs = EV.subs || []; EVbase = JSON.stringify(EV); evSheet(false); };
 const RIDER = () => ({ artist: "", venue: "", contact: "", loadin: "", soundcheck: "", show: "", pa: "", foh: "", inputs: [{ ch: 1, src: "Kick", mic: "", stand: "", note: "" }], mons: [{ mix: 1, who: "", type: "wedge", note: "" }], backline: "", power: "", lights: "", notes: "" });
-let evT = null; const evSave = now => { clearTimeout(evT); const f = () => { if (EV && EV.name) put("ev/" + EVID, EV); }; if (now) f(); else evT = setTimeout(f, 700); };
+let evT = null, EVbase = ""; const evSave = now => { clearTimeout(evT); const f = () => { if (!EV || !EV.name) return; const out = { ...EV, subs: (EV.subs || []).filter(x => x.name || +x.amount || x.inv) }, j = JSON.stringify(out); if (j === EVbase) return; put("ev/" + EVID, out); EVbase = j; }; if (now) f(); else evT = setTimeout(f, 700); };
 function evSheet(isNew) {
   const e = EV, s = subsTot(e), keep = (+e.amount || 0) - s;
   sheet(isNew ? "Eveniment nou" : e.name || "Eveniment", `
