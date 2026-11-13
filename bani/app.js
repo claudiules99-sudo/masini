@@ -452,15 +452,17 @@ window.delEvent = () => { if (!confirmBox("Ștergi evenimentul?")) return; put("
 function confirmBox(msg) { try { return window.confirm(msg); } catch (e) { return true; } }
 function subCard(x, i) {
   const inv = x.inv;
-  return `<div class="panel" style="padding:12px;margin-bottom:8px">
-  <div class="g2"><label class="field"><span>Nume</span><input value="${esc(x.name)}" oninput="SUBset(${i},'name',this.value)"></label><label class="field"><span>Sumă (lei)</span><input type="number" inputmode="decimal" value="${x.amount || ""}" onchange="SUBset(${i},'amount',+this.value,1)"></label></div>
+  return `<div class="panel" data-sub="${i}" style="padding:12px;margin-bottom:8px">
+  <div class="g2"><label class="field"><span>Nume</span><input placeholder="ex. Sora Darius PFA" value="${esc(x.name)}" oninput="SUBset(${i},'name',this.value)"></label><label class="field"><span>Sumă (lei)</span><input type="number" inputmode="decimal" value="${x.amount || ""}" onchange="SUBset(${i},'amount',+this.value,1)"></label></div>
   <div class="bar"><label class="check"><input type="checkbox" ${x.paid ? "checked" : ""} onchange="SUBset(${i},'paid',this.checked,1)"><span class="box"></span>plătit</label>
   <label class="check" style="margin-left:10px"><input type="checkbox" ${x.doc !== false ? "checked" : ""} onchange="SUBset(${i},'doc',this.checked,1)"><span class="box"></span>cu acte</label><span class="sp"></span>
-  <label class="btn sm">${inv ? "Altă factură" : "Factura"}<input type="file" accept="image/*,application/pdf" hidden onchange="readInv(${i},this.files[0])"></label><button class="btn sm ghost" onclick="EV.subs.splice(${i},1);evSave(1);evSheet()">Șterge</button></div>
+  <label class="btn sm">${inv ? "Altă factură" : "Factura"}<input type="file" accept="image/*,application/pdf" hidden onchange="readInv(${i},this.files[0])"></label><button class="btn sm ghost" onclick="subDel(${i})">Șterge</button></div>
   ${inv ? invBox(inv, i) : ""}</div>`;
 }
 window.SUBset = (i, k, v, re) => { EV.subs[i][k] = v; evSave(re); if (re) { const y = $("#sheet").scrollTop; evSheet(); $("#sheet").scrollTop = y; } };
-window.subAdd = () => { EV.subs.push({ name: "", amount: 0, paid: false, doc: true }); evSheet(); };
+window.subAdd = () => { EV.subs.push({ name: "", amount: 0, paid: false, doc: true }); evSheet(); const i = EV.subs.length - 1, card = document.querySelector(`#sheet [data-sub="${i}"]`);
+  if (card) { card.scrollIntoView({ behavior: "smooth", block: "center" }); const inp = card.querySelector("input"); setTimeout(() => inp && inp.focus({ preventScroll: true }), 300); } };
+window.subDel = i => { if (!confirmBox("Ștergi subcontractorul?")) return; const y = $("#sheet").scrollTop; EV.subs.splice(i, 1); evSave(1); evSheet(); $("#sheet").scrollTop = y; };
 function invBox(inv, i) {
   if (inv.busy) return `<div class="sub" style="margin-top:8px">Citesc factura…</div>`;
   const s = inv.sum || {}; const det = s.detalii || (s.nr ? `Contravaloare factura ${s.nr}${s.data ? " din " + s.data : ""}` : "");
