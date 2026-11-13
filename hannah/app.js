@@ -21,7 +21,7 @@ const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 
 const mkey = s => s.slice(0, 7);
 const clone = o => JSON.parse(JSON.stringify(o ?? null));
 const normName = s => String(s || "").trim().replace(/\s+/g, " ");
-const splitKids = s => normName(s).split(/\s+(?:si|și|\+|&)\s+/i).map(normName).filter(Boolean);
+const splitKids = s => { const n = normName(s), g = (typeof cfg === "function" ? (cfg().groups || []) : []).find(x => n.toLowerCase().startsWith(x.toLowerCase())); return g ? [g] : n.split(/\s+(?:si|și|\+|&)\s+/i).map(normName).filter(Boolean); };
 const initials = s => s.split(" ").filter(Boolean).slice(0, 2).map(w => w[0]).join("").toUpperCase();
 const mShift = (m, n) => { const [y, mm] = m.split("-").map(Number); const d = new Date(y, mm - 1 + n, 1); return ymd(d).slice(0, 7); };
 const mName = m => MONTHS[+m.slice(5, 7) - 1] + (m.slice(0, 4) !== today().slice(0, 4) ? " " + m.slice(0, 4) : "");
@@ -44,7 +44,7 @@ const catOf = c => CATS[c] || CATS["Altele"];
 
 /* ---------- stare ---------- */
 const DEF = {
-  defRate: 120, rates: {}, ignore: [], due: "2027-06-02",
+  defRate: 120, rates: {}, ignore: [], groups: ["Timi si Sofi"], due: "2027-06-02",
   fixed: [
     { id: "fx1", n: "Chirie Reverb", a: 1000, cat: "Muncă", from: "2026-11" },
     { id: "fx2", n: "Abonament Regina Maria", a: 100, cat: "Sănătate", from: "2026-11" },

@@ -247,7 +247,7 @@ function sendPushAll_() {
 }
 
 /* ore neconfirmate azi (pentru notificare) */
-function splitKids_(s) { return String(s).trim().replace(/\s+/g, ' ').split(/\s+(?:si|și|\+|&)\s+/i); }
+function splitKids_(s, groups) { var n = String(s).trim().replace(/\s+/g, ' '); var g = (groups || []).filter(function (x) { return n.toLowerCase().indexOf(x.toLowerCase()) === 0; })[0]; return g ? [g] : n.split(/\s+(?:si|și|\+|&)\s+/i); }
 function pendingToday_() {
   var now = new Date(), today = Utilities.formatDate(now, TZ, 'yyyy-MM-dd'), tom = Utilities.formatDate(new Date(now.getTime() + 864e5), TZ, 'yyyy-MM-dd');
   var docs = readAll_(), cfg = docs['cfg/main'] || {}, ignore = cfg.ignore || [];
@@ -255,7 +255,7 @@ function pendingToday_() {
   var kids = [];
   oreEvents_(today, tom).forEach(function (e) {
     if (ignore.indexOf(e.summary.trim().replace(/\s+/g, ' ')) >= 0) return;
-    splitKids_(e.summary).forEach(function (k) { if (!done[k] && kids.indexOf(k) < 0) kids.push(k); });
+    splitKids_(e.summary, cfg.groups || ['Timi si Sofi']).forEach(function (k) { if (!done[k] && kids.indexOf(k) < 0) kids.push(k); });
   });
   return { date: today, kids: kids };
 }
